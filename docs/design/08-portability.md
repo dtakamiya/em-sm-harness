@@ -25,7 +25,7 @@
 雛形は `config/templates/` に架空値で置く。現地では `cp config/templates/local.yaml.example config/local.yaml` して埋める（`config/local.*` は gitignore なので雛形名は `local.` で始めない）。
 
 ## 現地セットアップの流れ（目標形）
-1. repo を持ち込む（経路は Q-009）
+1. repo を持ち込む（経路は Q-003 の会社ポリシー確認の回答に従う。Q-009 回答済み。Q-003 は未回答）
 2. 雛形を `config/local.*` にコピーして埋める（会社固有値はここだけ）
 3. `data/` 配下のディレクトリを作る（`scripts/bootstrap`、未実装・backlog）
 4. 環境チェック（`scripts/check-env`、未実装・backlog）: 必要コマンド有無、`data/` と `config/local.*` が gitignore されているか、repo 内に秘密値らしき文字列が無いか
@@ -45,7 +45,7 @@
 
 - 書く場所（現地）: `data/feedback-outbox.md`（gitignore）に `- YYYY-MM-DD 一言` で追記
 - 書く時の規則: 実名・社内固有名・Jira キー・Slack 本文・URL を書かない（`<人A>`、`<チケットX>` に置換）。迷ったら書かない
-- 運ぶ方法: EM が内容を読み、問題なければ [feedback-inbox.md](feedback-inbox.md) に追記（repo に入れられる場合）、または Ryoko に直接伝える（経路は Q-010）
+- 運ぶ方法: EM が内容を読み、問題なければ **Ryoko に直接伝える**（Q-010 回答済み。push 権限や会社ポリシーに依存しない）。feedback-inbox.md への追記は、Ryoko 側が開発環境で行う
 - 秘書は feedback-outbox を**書くだけ**（EM の一言を整形して追記）。送信・同期はしない
 - 開発側は inbox を拾い、バックログに `proposed` として載せる（既存運用どおり）
 
@@ -59,6 +59,7 @@
 - 自動同期（個人 Mac ↔ 会社 Mac）。同期は人手のみ
 - 実接続の手順（emh-020 / Jira・Confluence 接続設計書の担当）
 
-## 未決（open-questions）
-- Q-009: repo の持ち込み経路
-- Q-010: フィードバックの運び方
+## 決定済み・未決（open-questions）
+- Q-009（持ち込み経路）: 回答済み。Q-003（会社ポリシー確認）の回答に従う
+- Q-010（フィードバックの運び方）: 回答済み。匿名化した一言を EM が Ryoko に直接伝える
+- 未決: Q-003（会社ポリシー確認）。回答までは持ち込み経路（clone 可否）も確定しない
