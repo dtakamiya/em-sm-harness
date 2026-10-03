@@ -25,7 +25,7 @@
 雛形は `config/templates/` に架空値で置く。現地では `cp config/templates/local.yaml.example config/local.yaml` して埋める（`config/local.*` は gitignore なので雛形名は `local.` で始めない）。
 
 ## 現地セットアップの流れ（目標形）
-1. repo を持ち込む（経路は Q-007）
+1. repo を持ち込む（経路は Q-009）
 2. 雛形を `config/local.*` にコピーして埋める（会社固有値はここだけ）
 3. `data/` 配下のディレクトリを作る（`scripts/bootstrap`、未実装・backlog）
 4. 環境チェック（`scripts/check-env`、未実装・backlog）: 必要コマンド有無、`data/` と `config/local.*` が gitignore されているか、repo 内に秘密値らしき文字列が無いか
@@ -36,12 +36,16 @@
 - 現地データの形式が変わるときは CHANGELOG に「データ移行の要否」を必ず書く。移行が要る場合は移行手順を設計書に残し、移行前に `data/` のバックアップを取る手順を先頭に置く
 - 現地の `config/local.*` は更新で上書きされない（gitignore なので pull で触れない）。雛形側にキーが増えたら CHANGELOG で告知
 
+## 改善はどう回るか（EM 決定: 案A）
+改善ループ（board 選択 → 分析 → 実装 → レビュー → PR → ログ）は **Ryoko 側（個人 Mac 環境）で継続**する。会社 Mac には repo（スキル・ポリシー・テンプレ）だけを持っていき、会社 Mac 上で改善ループを自動で回さない。
+現地で気づいた改善点は、下の「匿名化した一言」の経路で開発側へ戻す。開発側の更新は PR → EM がマージ → 現地が pull で追従する。
+
 ## フィードバック経路（現地 → 開発）
 現地の実データは持ち出せないので、**匿名化した一言**だけを人手で運ぶ。
 
 - 書く場所（現地）: `data/feedback-outbox.md`（gitignore）に `- YYYY-MM-DD 一言` で追記
 - 書く時の規則: 実名・社内固有名・Jira キー・Slack 本文・URL を書かない（`<人A>`、`<チケットX>` に置換）。迷ったら書かない
-- 運ぶ方法: EM が内容を読み、問題なければ [feedback-inbox.md](feedback-inbox.md) に追記（repo に入れられる場合）、または Ryoko に直接伝える（経路は Q-008）
+- 運ぶ方法: EM が内容を読み、問題なければ [feedback-inbox.md](feedback-inbox.md) に追記（repo に入れられる場合）、または Ryoko に直接伝える（経路は Q-010）
 - 秘書は feedback-outbox を**書くだけ**（EM の一言を整形して追記）。送信・同期はしない
 - 開発側は inbox を拾い、バックログに `proposed` として載せる（既存運用どおり）
 
@@ -56,5 +60,5 @@
 - 実接続の手順（emh-020 / Jira・Confluence 接続設計書の担当）
 
 ## 未決（open-questions）
-- Q-007: repo の持ち込み経路
-- Q-008: フィードバックの運び方
+- Q-009: repo の持ち込み経路
+- Q-010: フィードバックの運び方
