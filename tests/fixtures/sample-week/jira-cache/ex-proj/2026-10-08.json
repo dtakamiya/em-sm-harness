@@ -1,0 +1,16 @@
+{"schema_version":1,"fetched_at":"2026-10-08T08:30:00+09:00","project_alias":"ex-proj","jql_sha256":"0000000000000000000000000000000000000000000000000000000000000000","complete":true,"partial_reason":null,"issue_count":4,
+ "issues":[
+  {"key":"EX-101","summary":null,"status":"In Progress","status_category":"indeterminate","issuetype":"Story","priority":"High","assignee_ref":"u_a1b2c3d4","created":"2026-09-21","updated":"2026-10-01","resolved":null,"story_points":5,"flagged":true,"parent_key":null,
+   "sprints":[{"id":11,"name":"Sprint 11","state":"active","start":"2026-09-28","end":"2026-10-09"}],
+   "links":[{"link_type":"blocks","direction":"inward","issue_key":"EX-103"}],
+   "transitions":[{"field":"status","from":"To Do","to":"In Progress","at":"2026-09-29"},{"field":"story_points","from":"3","to":"5","at":"2026-10-02"}]},
+  {"key":"EX-102","summary":null,"status":"To Do","status_category":"new","issuetype":"Story","priority":"Medium","assignee_ref":"u_b2c3d4e5","created":"2026-09-22","updated":"2026-10-07","resolved":null,"story_points":8,"flagged":false,"parent_key":null,
+   "sprints":[{"id":10,"name":"Sprint 10","state":"closed","start":"2026-09-14","end":"2026-09-25"},{"id":12,"name":"Sprint 12","state":"future","start":"2026-10-12","end":"2026-10-23"}],
+   "links":[],"transitions":[{"field":"sprint","from":"Sprint 11","to":"Sprint 12","at":"2026-10-07"}]},
+  {"key":"EX-103","summary":null,"status":"To Do","status_category":"new","issuetype":"Task","priority":"Medium","assignee_ref":"u_c3d4e5f6","created":"2026-09-25","updated":"2026-09-25","resolved":null,"story_points":0,"flagged":false,"parent_key":null,
+   "sprints":[{"id":11,"name":"Sprint 11","state":"active","start":"2026-09-28","end":"2026-10-09"}],
+   "links":[{"link_type":"blocks","direction":"outward","issue_key":"EX-101"}],"transitions":[]},
+  {"key":"EX-104","summary":null,"status":"Done","status_category":"done","issuetype":"Bug","priority":"Low","assignee_ref":"u_a1b2c3d4","created":"2026-09-26","updated":"2026-10-06","resolved":"2026-10-06","story_points":null,"flagged":false,"parent_key":null,
+   "sprints":[{"id":11,"name":"Sprint 11","state":"active","start":"2026-09-28","end":"2026-10-09"}],
+   "links":[],"transitions":[{"field":"status","from":"In Progress","to":"Done","at":"2026-10-06"}]}
+ ]}

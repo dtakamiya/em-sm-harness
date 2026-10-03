@@ -1,0 +1,5 @@
+{"schema_version":1,"space_alias":"ex-space","fetched_at":"2026-10-08T08:35:00+09:00","complete":true,"partial_reason":null,"page_count":2,
+ "pages":[
+  {"page_id":"1001","title":"Sprint 11 計画メモ","version":3,"last_modified":"2026-10-02","parent_id":null,"labels":["sprint"],"url":"https://example.invalid/wiki/1001","body_file":"1001.md","body_status":"ok","unconverted":[],"body_sha256":"0000000000000000000000000000000000000000000000000000000000000000","fetched_at":"2026-10-08T08:35:00+09:00"},
+  {"page_id":"1002","title":"リリース判定会議 議事録","version":1,"last_modified":"2026-10-06","parent_id":null,"labels":["meeting"],"url":"https://example.invalid/wiki/1002","body_file":"1002.md","body_status":"partial_unconverted","unconverted":[{"kind":"table","anchor":"section-2"}],"body_sha256":"0000000000000000000000000000000000000000000000000000000000000000","fetched_at":"2026-10-08T08:35:00+09:00"}
+ ]}
