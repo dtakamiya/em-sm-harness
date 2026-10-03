@@ -8,8 +8,8 @@ default: deny            # 書かれていない種別・タグは拒否（L1 �
 # 判定順: (1) hard_deny タグ該当 → L2 不可 (2) タグ無し・不明 → L1 止まり (3) grants 不一致 → L1
 #         (4) reversible: false / audience が scope 外 → L1 止まり (5) 上限・期限・KILL・不在 → L1
 action_kinds:
-  jira.comment:       { default_level: L1, l2_eligible: false, note: "他人が読み EM の声に見える。永続 L1（Q-005）" }
-  jira.transition:    { default_level: L1, l2_eligible: false, note: "自動化の連鎖がある。永続 L1（Q-005）" }
+  jira.comment:       { default_level: L1, l2_eligible: false, note: "他人が読み EM の声に見える。永続 L1（EM 決定 2026-10-03）" }
+  jira.transition:    { default_level: L1, l2_eligible: false, note: "自動化の連鎖がある。永続 L1（EM 決定 2026-10-03）" }
   jira.update_own_task: { default_level: L1, l2_eligible: false, note: "候補。EM が付与するまで L1" }
   slack.send:         { default_level: L1, l2_eligible: true,  note: "自由文は L2 不可。テンプレ固定+宛先固定の定型のみ候補" }
   confluence.update:  { default_level: L1, l2_eligible: false, note: "" }
