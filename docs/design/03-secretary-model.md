@@ -32,9 +32,11 @@ EM が見るのは「何を決めるか」だけ、という状態を目指す�
 { "action": "jira.comment", "target": "ABC-123", "content": "...", "level_required": "L1",
   "reversible": true, "audience": "team", "rationale": "..." }
 ```
-- `action` 種別ごとに委任ポリシー（`policy/delegation.yaml`、EM が編集）で可否を判定
+- `level_required` / `reversible` / `sensitivity`（内容の機微タグ）は秘書の自己申告。**権威は委任ポリシー**（`policy/delegation.yaml`、EM が編集）。食い違えば厳しい側
+- 判定は `action` 種別 × `sensitivity` タグの2軸。詳細は [05-approval-and-audit.md](05-approval-and-audit.md)、判断の経緯は [ADR 0001](../adr/0001-delegation-policy-approval-audit.md)
+- `reversible` = 受け手に通知が届かずに戻せるか（Slack 送信は通知が残るので false）
 - 現フェーズは全アクションが「下書きとして EM に提示」で終わる
-- 将来 L2 を付与する場合も: ドライラン → 差分表示 → 実行 → 監査ログ（`data/audit/`）。取り消せないものは L2 にしない
+- 将来 L2 を付与する場合も: ドライラン → 差分表示 → 承認（content_hash 束縛）→ 実行 → 監査ログ（`data/audit/`）。取り消せないものは L2 にしない。監査ログは L1 でも取る
 
 ## L2 候補の考え方（emh-014 で詰める）
 低リスク・可逆・影響範囲が自分/小さい: 自分のタスクの更新、定型の日程調整、既決事項の議事録共有 など。
