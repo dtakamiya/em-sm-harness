@@ -1,6 +1,6 @@
 # 0001. 委任ポリシー・承認フロー・監査ログの方式
 
-- 状態: 提案（Ryoko の design-review 判定待ち）
+- 状態: 採用（条件付き GO。最初の grants 付与前に policy lint = emh-022 が必要）
 - 日付: 2026-10-03
 - 関連: emh-013 / docs/design/03-secretary-model.md / docs/design/05-approval-and-audit.md / policy/delegation.yaml
 
