@@ -48,4 +48,5 @@
 ## 未決事項
 - Cloud か Data Center か → **Cloud**（Q-001 回答済み）
 - 対象プロジェクト・ボード・Confluence スペースの範囲
+- 出力品質の受け入れ基準 → [14-output-quality-checklist.md](14-output-quality-checklist.md)（60秒・事実/解釈・因果/共起・レッテル・委任ラダー）
 - Slack 貼り付けの標準フォーマット → [13-slack-paste-input.md](13-slack-paste-input.md) で設計済み（緩い解釈 + 任意の見出し行。実際のコピー形式との差は EM 確認）
