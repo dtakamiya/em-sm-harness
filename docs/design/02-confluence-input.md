@@ -36,3 +36,5 @@
 ## 未決事項
 - 対象スペース・ページ範囲、Cloud / Data Center
 - 取り込んでよいページの機密区分（人事・評価に関わるページは対象外にする）
+
+> キャッシュの詳細スキーマ・保持期間・削除は [06-cache-schema.md](06-cache-schema.md)、fetcher の責務境界は [07-fetcher-boundary.md](07-fetcher-boundary.md) を正とする。
