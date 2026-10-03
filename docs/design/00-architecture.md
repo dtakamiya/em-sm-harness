@@ -9,11 +9,11 @@ EM/スクラムマスター業務の「情報集め → 整理 → 判断材料�
 ## データフロー
 
 ```
- Jira (API トークン)            Slack（手で貼る）
+ Jira / Confluence (API トークン)   Slack（手で貼る）
         │ 読み取りのみ                 │
         ▼                            ▼
- data/jira-cache/*.json     data/inbox/slack/YYYY-MM-DD-*.md
-        │                            │ 匿名化 → 構造化
+ data/jira-cache/*.json        data/inbox/slack/YYYY-MM-DD-*.md
+ data/confluence-cache/*.json         │ 匿名化 → 構造化
         └──────────────┬─────────────┘
                        ▼
             data/structured/*.json   （正規化データ: 決定/依頼/リスク/障害物/チケット状態）
@@ -27,13 +27,13 @@ EM/スクラムマスター業務の「情報集め → 整理 → 判断材料�
 
 ## 設計方針
 - **実データはすべて `data/`（gitignore）**。リポジトリに入るのはコード・テンプレ・設計書・架空サンプルのみ
-- **外部依存は Jira のみ**。他の MCP/SaaS 連携を前提にしない
+- **外部依存は Jira / Confluence のみ**（Atlassian 認証を共通化）。他の MCP/SaaS 連携を前提にしない
 - **段階的**: まず Slack 貼り付け取り込み＋モック Jira で出力を磨き、Jira 実接続は最後（GO 後）
 - **事実と解釈の分離**: 出力は「観察（事実・出典付き）」と「解釈の候補」を別セクションにする
 - **60秒で読める**: 出力は結論→要対応→詳細の順。長いものは詳細に回す
 
 ## 非ゴール
-- Jira / Slack への書き込み・自動投稿
+- Jira / Confluence / Slack への書き込み・自動投稿
 - チームメンバーへの展開、人事評価の自動判定
 - 実接続（現フェーズ）
 
@@ -43,6 +43,6 @@ EM/スクラムマスター業務の「情報集め → 整理 → 判断材料�
 3. レトロ / 1on1 準備
 
 ## 未決事項
-- Jira は Cloud か Data Center か（認証方式・API バージョンが変わる）
-- 対象プロジェクト・ボードの範囲
+- Jira / Confluence は Cloud か Data Center か（認証方式・API バージョンが変わる）
+- 対象プロジェクト・ボード・Confluence スペースの範囲
 - Slack 貼り付けの標準フォーマット（チャンネル名・日時・スレッド構造をどこまで含めるか）
