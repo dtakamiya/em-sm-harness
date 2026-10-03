@@ -35,7 +35,7 @@ L2（事前承認ルールによる代行実行）を後から安全に足せる
 6. 監査は日次 jsonl・本文なし・サマリは別ファイル。ハッシュ連鎖は L2 付与時に必須
 7. 合意: fail-closed（期限切れ・上限超過・KILL・不在 → L1）、`content_hash` 承認束縛、影子運用、L1 から監査を取る
 
-em-lead 集約。Ryoko の design-review 判定: （PR レビューで記入）
+em-lead 集約。Ryoko の design-review 判定: **条件付き GO**（2026-10-03）。根拠: fail-closed・本文なし監査・grants 空で現状 L1 を維持でき、委任ラダーの逸脱なし。条件: (1) EM が Q-004/Q-005 に回答 (2) 最初の grants 付与前に policy lint（emh-022）を用意 (3) 採用ステータスへの更新は EM のマージ後
 
 ## 影響・残る論点
 - 変更: 03 の記述を policy 権威・sensitivity 軸・reversible 定義に更新、00 に audit を追記、05 新設、policy/delegation.yaml 雛形
