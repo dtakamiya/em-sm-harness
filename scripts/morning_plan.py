@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """今日の計画（朝）を tasks.json から生成する。読み取り専用・stdlib のみ・外部接続なし。
 
-設計: docs/design/15-morning-plan.md。ルールは暫定（emh-016 で確定）。
+設計: docs/design/15-morning-plan.md。ルールは docs/design/17-task-priority-and-waiting.md。
 """
 import argparse
 import json
@@ -36,16 +36,22 @@ def _visible(task, today):
     return snooze is None or snooze <= today
 
 
-def sort_key(task, today):
+def _blocking_count(task, open_ids):
+    return sum(ref in open_ids for ref in task.get("blocks", []))
+
+
+def sort_key(task, today, open_ids=frozenset()):
     due = _day(task.get("due"))
     days = (due - today).days if due else 10**6
     band = 0 if days < 0 else 1 if days == 0 else 2 if days <= SOON_DAYS else 3
-    return (band, PRIORITY_RANK.get(task.get("priority", "soon"), 1), days, task["id"])
+    blocking = -_blocking_count(task, open_ids)
+    return (band, PRIORITY_RANK.get(task.get("priority", "soon"), 1), blocking, days, task["id"])
 
 
 def build_plan(tasks, candidates, today):
     live = [t for t in tasks if _visible(t, today)]
-    active = sorted((t for t in live if t["status"] in ACTIVE), key=lambda t: sort_key(t, today))
+    open_ids = frozenset(t["id"] for t in live if t["status"] in ACTIVE + ("waiting",))
+    active = sorted((t for t in live if t["status"] in ACTIVE), key=lambda t: sort_key(t, today, open_ids))
     overdue = [t for t in active if _day(t.get("due")) and _day(t["due"]) < today]
     nudges = sorted(
         (t for t in live if t["status"] == "waiting" and _day(t["next_check"]) <= today),
@@ -110,7 +116,7 @@ def render(plan):
         if plan["candidate_overflow"]:
             out.append(f"- ほか {plan['candidate_overflow']} 件")
     out += ["", "## 詳細", "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）",
-            "- 並べ順は暫定: 期限超過 → 今日 → 3日以内 → 優先度 now/soon/later → 期限順"]
+            "- 並べ順は暫定: 期限超過 → 今日 → 3日以内 → 優先度 now/soon/later → 他を止めている数 → 期限順"]
     return "\n".join(out) + "\n"
 
 

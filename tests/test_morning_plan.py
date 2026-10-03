@@ -22,6 +22,26 @@ class MorningPlanTest(unittest.TestCase):
         self.cands = load("candidates.sample.json", "candidates")
         self.plan = mp.build_plan(self.tasks, self.cands, TODAY)
 
+    def _task(self, tid, status="open", blocks=()):
+        return {"id": tid, "title": "x", "status": status, "priority": "soon",
+                "due": "2026-10-20", "blocks": list(blocks), "history": []}
+
+    def test_task_blocking_more_comes_first_in_same_band(self):
+        tasks = [self._task("t-1"), self._task("t-2", blocks=["t-3", "t-4"]),
+                 self._task("t-3"), self._task("t-4")]
+        plan = mp.build_plan(tasks, [], TODAY)
+        self.assertEqual(plan["top"][0]["id"], "t-2")
+
+    def test_done_task_is_not_counted_as_blocked(self):
+        tasks = [self._task("t-1"), self._task("t-2", blocks=["t-9"]), self._task("t-9", status="done")]
+        plan = mp.build_plan(tasks, [], TODAY)
+        self.assertEqual([t["id"] for t in plan["top"]], ["t-1", "t-2"])
+
+    def test_order_is_deterministic(self):
+        first = mp.build_plan(self.tasks, self.cands, TODAY)["top"]
+        second = mp.build_plan(list(reversed(self.tasks)), self.cands, TODAY)["top"]
+        self.assertEqual([t["id"] for t in first], [t["id"] for t in second])
+
     def test_overdue_task_comes_first(self):
         self.assertEqual(self.plan["top"][0]["id"], "t-0001")
 

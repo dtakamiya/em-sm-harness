@@ -14,8 +14,8 @@
 | `data/tasks/candidates.json` | 最大 5 件。`{id,title,source,source_ref,suggested_due}` |
 | 出力 | 標準出力の Markdown 1 枚（結論 → EM がやること → 今日やる順 → 催促候補 → 判断依頼 → 候補 → 詳細） |
 
-## 暫定ルール（emh-016 で確定する）
-- 並べ順: 期限超過 → 今日期限 → 3 日以内 → それ以外。同じ帯では priority（now/soon/later）→ 期限順
+## ルール（確定案は [17](17-task-priority-and-waiting.md)）
+- 並べ順: 期限超過 → 今日期限 → 3 日以内 → それ以外。同じ帯では priority（now/soon/later）→ 他を止めている数（`blocks`）→ 期限順
 - 上位 5 件まで表示。超過分は件数だけ
 - 結論: 🔴 期限超過あり / 🟡 催促候補か判断依頼あり / 🟢 それ以外
 - 催促候補: `waiting` で `next_check` が今日以前
