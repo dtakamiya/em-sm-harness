@@ -1,0 +1,6 @@
+{"version":1,"tasks":[
+ {"id":"t-0001","title":"デモ環境の担当を決める","status":"open","priority":"now","due":"2026-10-09","source":"slack","source_ref":"2026-10-05-ex-team-01.md:s-01","waiting_on":null,"next_check":null,"blocks":["t-0003"],"tags":[],"notes":"","created":"2026-10-05","updated":"2026-10-05","history":[{"at":"2026-10-05","op":"add"}]},
+ {"id":"t-0002","title":"member-c の staging データ準備を待つ","status":"waiting","priority":"soon","due":null,"source":"confluence","source_ref":"1002","waiting_on":"member-c","next_check":"2026-10-08","blocks":["t-0003"],"tags":[],"notes":"","created":"2026-10-06","updated":"2026-10-06","history":[{"at":"2026-10-06","op":"add"}]},
+ {"id":"t-0003","title":"リリース判断の準備メモを作る","status":"open","priority":"soon","due":"2026-10-13","source":"manual","source_ref":null,"waiting_on":null,"next_check":null,"blocks":[],"tags":[],"notes":"","created":"2026-10-06","updated":"2026-10-07","history":[{"at":"2026-10-06","op":"add"},{"at":"2026-10-07","op":"defer"},{"at":"2026-10-08","op":"defer"}]},
+ {"id":"t-0004","title":"ステークホルダー週次報告を確認する","status":"open","priority":"later","due":"2026-10-07","source":"manual","source_ref":null,"waiting_on":null,"next_check":null,"blocks":[],"tags":[],"notes":"","created":"2026-10-05","updated":"2026-10-05","history":[{"at":"2026-10-05","op":"add"}]}
+]}
