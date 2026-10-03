@@ -1,7 +1,7 @@
 # キャッシュスキーマ（Jira / Confluence）
 
 状態: ドラフト（設計のみ・実接続なし）。判断の背景は [ADR 0002](../adr/0002-cache-schema-and-retention.md)。
-スキーマの値はすべて架空例（`ex-proj` / `EX-123`）。会社固有情報は書かない。TTL の日数は EM 判断待ち（[open-questions Q-006](open-questions.md)）。
+スキーマの値はすべて架空例（`ex-proj` / `EX-123`）。会社固有情報は書かない。TTL は EM 回答済み（Q-006: 14日）。`structured/` の保持期間と `summary` 既定値は EM 判断待ち（Q-007 / Q-008）。
 
 ## 1. 原則
 - **必要フィールドのみ保存**。API レスポンスそのものは保存しない（取得直後に項目を絞り、元データは破棄）
@@ -23,7 +23,7 @@
 | `issues[].transitions[]` | `field`（`status` / `story_points` / `sprint` のいずれか）/ `from` / `to` / `at`。変更者（author）は持たない |
 
 - `assignee_ref`: `u_` + HMAC-SHA256(ローカル鍵, accountId) の先頭 8 桁。**状態を持たない**ので採番表の破損が起きない。鍵は `config/local.*`（環境変数名のみ設計書に書く）。表示名との対応表はローカルスクリプトが `config/local.*` 側にだけ作る。キャッシュには表示名・メールを入れない
-- `summary`: 課題の中身そのもの（機微になりうる）。設定 `store_summary`（既定 true）。false にすると `null` を書く「最小モード」（組織ポリシーが厳しい場合の退避。スキーマ変更なしで切替）
+- `summary`: 課題の中身そのもの（機微になりうる）。設定 `store_summary`。false にすると `null` を書く「最小モード」（スキーマ変更なしで切替）。**既定は false**（会社ポリシー確認 Q-003 が済むまで。Q-008 で EM 判断待ち）
 - `transitions` の対象を status / story_points / sprint に絞る理由: ステータス滞留・見積もり乖離・スコープ変動の入力に要るため。**assignee の遷移は含めない**（人の割当履歴は評価に転用されやすい。担当偏りは現在値の `assignee_ref` で足りる。再アサイン分析が必要になれば emh-004 で理由を示し EM 承認を経て版を上げる）
 - `resolved` は status 遷移から導けるが、遷移が TTL で消えた古い課題でも使えるよう保存する
 - カスタムフィールド ID（story points・sprint）は `config/local.*` に置く
@@ -44,7 +44,7 @@
 
 ## 4. 保持期間（TTL）と自動削除
 - 基準: Jira は日次ファイルの `fetched_at`、Confluence はページの `fetched_at`（mtime は使わない。コピーで変わる）
-- 日数: `config/local.*` の `ttl_days`。**コード側に固定の上限 30 日**（変更は PR 経由）。既定値は EM 判断待ち（Q-006。推奨 14 日）
+- 日数: `config/local.*` の `ttl_days`。**コード側に固定の上限 30 日**（変更は PR 経由）。既定 **14 日**（EM 回答済み: Q-006）。この上限はキャッシュ（`jira-cache` / `confluence-cache`）にだけ適用。`structured/` は別設定・別上限（下記）
 - 削除の契機（常駐・cron は使わない）:
   1. 同期コマンドと共通ローダの**起動時に `purge_expired()` を実行**（遅延パージ）
   2. **ローダは期限切れを読まない**（fail-closed。パージが失敗しても期限切れは使われない）
@@ -52,7 +52,7 @@
   4. 期限切れ残置が検出されたら起動時に警告
 - 部分取得（`complete: false`）も TTL で消える。消えた分は「再取得が必要」と表示
 - 削除は監査ログに件数と alias のみ記録（本文・タイトルは書かない）
-- 履歴の持ち越し: キャッシュ TTL が短いので、指標の入力（key・status・日付・数値・`assignee_ref`・遷移）は本文なし・`summary` なしの集計値として `data/structured/` に確定させる（保持 90 日。実装は emh-004 以降）。`summary` や本文を含む派生物（`structured/`・`outputs/`）はキャッシュと同じ TTL を継承する
+- 履歴の持ち越し（**Q-007 で EM 判断待ち。回答まで実装しない**）: キャッシュは 14 日で消えるので、指標の入力は本文なし・`summary` なしの集計値として `data/structured/` に確定させる案。保持は Q-007 の a)=90 日 / b)=14 日。90 日の場合も **`assignee_ref` と遷移の個別履歴は持ち込まない**（担当者別の件数・SP の分布など集計値のみ。少人数だと鍵があれば逆引きでき、個人別データが長く残ると評価転用のリスクがあるため）。保持期間は `structured_ttl_days`（キャッシュの `ttl_days` とは別設定。コード側上限 90 日）。`summary` や本文を含む派生物（`structured/`・`outputs/`）はキャッシュと同じ 14 日を継承する
 
 ## 5. 会社データが会社 PC に残るリスクへの対策
 1. 最小保存（上記）。表示名・メール・コメント・description は元から持たない
