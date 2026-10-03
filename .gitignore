@@ -5,3 +5,4 @@ data/
 secrets/
 config/local.*
 .DS_Store
+.claude/settings.local.json
