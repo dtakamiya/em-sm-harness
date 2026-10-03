@@ -1,0 +1,4 @@
+{ "version": 1,
+  "candidates": [
+    {"id":"c-0001","title":"障害振り返りの日程を調整する","source":"slack","source_ref":"2026-10-03-sample.md","suggested_due":"2026-10-09"}
+  ] }
