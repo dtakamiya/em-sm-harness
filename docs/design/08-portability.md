@@ -29,7 +29,7 @@
 2. 雛形を `config/local.*` にコピーして埋める（会社固有値はここだけ）
 3. `data/` 配下のディレクトリを作る（`scripts/bootstrap`、未実装・backlog）
 4. 環境チェック（`scripts/check-env`、未実装・backlog）: 必要コマンド有無、`data/` と `config/local.*` が gitignore されているか、repo 内に秘密値らしき文字列が無いか
-5. 実接続は別途 GO 条件（emh-020）を満たしてから。それまではモックと貼り付けのみ
+5. 実接続は別途 GO 条件（[09](09-go-checklist.md)）を満たしてから。それまではモックと貼り付けのみ
 
 ## 更新の流れ
 - 個人 Mac で feat ブランチ → PR → だいすけがマージ。現地は `git pull`（または同等の持ち込み）で追従
