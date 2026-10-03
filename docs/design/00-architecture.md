@@ -25,6 +25,7 @@
                        ▼
             data/outputs/YYYY-MM-DD-*.md  （EM が読む成果物・下書き）
             data/actions/*.json           （秘書が「やりたいこと」をデータで提示。実行は EM。L2 付与後は policy 判定）
+            data/audit/*.jsonl            （何を・いつ・どの判定で扱ったかの記録。本文は持たない。05-approval-and-audit.md）
 ```
 
 ## 設計方針
