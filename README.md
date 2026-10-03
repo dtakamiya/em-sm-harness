@@ -24,6 +24,7 @@
 ## ディレクトリ
 
 ```
+templates/drafts/  下書きテンプレ群（Slack 返信・1on1・スプリントサマリ・報告。[README](templates/drafts/README.md)）
 docs/design/   設計書（別PC運用: [08-portability.md](docs/design/08-portability.md) / 会社 Mac での再構築: [10-rebuild-guide.md](docs/design/10-rebuild-guide.md)）
 config/templates/  設定の雛形（架空値）。現地用は config/local.*（gitignore）
 data/          実データ置き場（gitignore）
