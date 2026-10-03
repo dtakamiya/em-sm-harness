@@ -46,6 +46,6 @@
 3. スプリント健全性チェック / レトロ・1on1 準備の下書き
 
 ## 未決事項
-- Jira / Confluence は Cloud か Data Center か（認証方式・API バージョンが変わる）
+- Cloud か Data Center か → **Cloud**（Q-001 回答済み）
 - 対象プロジェクト・ボード・Confluence スペースの範囲
 - Slack 貼り付けの標準フォーマット（チャンネル名・日時・スレッド構造をどこまで含めるか）

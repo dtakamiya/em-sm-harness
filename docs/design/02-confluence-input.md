@@ -5,7 +5,7 @@
 値はすべて架空例（`ex-space` / `EX-123`）。会社固有情報は `config/local.*` にのみ置く。
 
 ## 1. 認証と権限
-- Cloud: Jira と**同じ API トークン**を共用（`JIRA_USER_EMAIL` / `JIRA_API_TOKEN`）。Confluence 用 base URL のみ `CONFLUENCE_BASE_URL`。Data Center: PAT（Bearer）。Cloud / DC は未確認（Q-001・[09](09-go-checklist.md) B1）。DC なら本書の API パス・CQL の差異を追記してから実装する
+- Cloud: Jira と**同じ API トークン**を共用（`JIRA_USER_EMAIL` / `JIRA_API_TOKEN`）。Confluence 用 base URL のみ `CONFLUENCE_BASE_URL`。**Cloud 確定**（Q-001・EM 回答済み）。Data Center（PAT）は対象外
 - 権限は**読み取りのみ**。書込権限を含むトークンしか無い場合は、書込 API を呼ぶコードを一切持たないこと（HTTP メソッドは GET のみ許可。テストで固定）で担保する
 - **トークンは Claude から見えない運用が必須**（Q-003 回答）。取得コマンドは EM が自分のターミナルで直接実行し、Claude は結果のキャッシュだけ読む。詳細は [09 C0](09-go-checklist.md)
 - ログ・エラーにトークン・Authorization ヘッダ・認証付き URL・ページ本文・タイトルを出さない（件数・HTTP ステータス・`space_alias` のみ）
@@ -43,7 +43,7 @@
 | 部分取得 | 出力冒頭に「取得範囲が不完全」と明記。後段の要約・突合は断定しない |
 
 ## 4. 手動入力フォールバック
-トークン不可・権限不足・Q-001 が DC で API が使えない場合は、ページを Markdown/HTML エクスポート（またはコピー）して
+トークン不可・権限不足で API が使えない場合は、ページを Markdown/HTML エクスポート（またはコピー）して
 `data/inbox/confluence/YYYY-MM-DD-<slug>.md` に置く。同じ構造化パイプラインに入る。
 - 先頭に任意のメタ（YAML front matter）: `title` / `url` / `version` / `last_modified`。無ければ `null` とし、要約には「出典メタ不明」と明記
 - `exclude_labels` 相当（機微ページ）は貼らない運用。貼られた場合に備え、取り込み時に EM 宛てに「機微ページは貼らない」と一言警告
@@ -95,6 +95,6 @@
 なし（GET のみ）。将来必要になった場合は別設計で「ドライラン → 差分表示 → 本人承認 → 実行」。
 
 ## 9. 未決事項
-- Cloud / Data Center（Q-001）、初期の取得範囲の確定（Q-002）
+- 初期の取得範囲の確定（Q-002）。Cloud / Data Center は Cloud で確定（Q-001）
 - 除外ラベルの具体名（会社側の運用に依存。EM が `config/local.*` に設定）
 - Confluence の Claude 処理可否は **可**（Q-012・EM 回答済み）。Slack 貼り付けは別途
