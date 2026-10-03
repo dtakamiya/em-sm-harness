@@ -1,10 +1,22 @@
-# アーキテクチャ（初版ドラフト）
+# アーキテクチャ
 
-状態: ドラフト（em-harness 部門が週次で改訂する）
+状態: 全体像・データフロー・ディレクトリ・非ゴールを確定（emh-001）。詳細は各設計書へ。em-harness 部門が改訂する
 
 ## 目的
 多忙な EM に代わって EM/スクラムマスター業務を進める秘書。「集める → 管理する（個人タスク）→ 先回りする → 下書きする → 判断材料を整える」を、Claude Code のスキルとスクリプトで行う。
 権限は委任ラダー（[03-secretary-model.md](03-secretary-model.md)）で管理。現在は L1（下書きまで）で、送信・更新は EM 本人。
+
+## 全体像（4層）
+
+| 層 | 役割 | 触るデータ | 詳細 |
+|---|---|---|---|
+| 取り込み | Jira / Confluence を読み取り専用で取得、Slack は貼り付けを受ける | `data/jira-cache` `data/confluence-cache` `data/inbox` | [01](01-jira-connection.md) [02](02-confluence-input.md) [13](13-slack-paste-input.md) |
+| 正規化 | 匿名化・構造化して共通スキーマにする | `data/structured` `data/tasks` | [06](06-cache-schema.md) [04](04-personal-tasks.md) |
+| 秘書スキル | 計画・先回り検知・下書き・健全性チェックを生成 | 上記を読むだけ | [03](03-secretary-model.md) [12](12-secretary-job-list.md) |
+| 承認・監査 | 提案を `actions` に出し、実行は EM。判定と記録は本文なし | `data/actions` `data/audit` | [05](05-approval-and-audit.md) [11](11-l2-candidates.md) |
+
+責務境界: 取得（fetcher）は読み取りとキャッシュ書き込みだけ。解釈・下書きは analyst / lead 側。互いの領域に入らない（[07](07-fetcher-boundary.md)）。
+横断ルール: 出力の品質基準は出力品質チェックリスト、別PC運用は [08](08-portability.md) / [10](10-rebuild-guide.md)、実接続の前提は [09](09-go-checklist.md)。
 
 ## データフロー
 
@@ -28,6 +40,21 @@
             data/audit/*.jsonl            （何を・いつ・どの判定で扱ったかの記録。本文は持たない。05-approval-and-audit.md）
 ```
 
+## ディレクトリ
+
+```
+docs/design/       設計書（00〜13）・open-questions.md（EM 判断待ち）
+docs/adr/          設計判断の記録
+policy/            委任ポリシー（delegation.yaml。L2 は当面 0 件）
+config/templates/  設定の雛形（架空値のみ）。現地用は config/local.*（gitignore）
+scripts/           実装時に追加（bootstrap / check-env / check-no-leak 等。未作成）
+skills/            秘書スキル（SKILL.md）。実装時に追加（未作成）
+data/              実データ置き場（gitignore。inbox / jira-cache / confluence-cache /
+                   structured / tasks / outputs / actions / audit）
+```
+
+`scripts/` と `skills/` は実装フェーズで作る。現フェーズは設計のみのため空ディレクトリは置かない。
+
 ## 設計方針
 - **実データはすべて `data/`（gitignore）**。リポジトリに入るのはコード・テンプレ・設計書・架空サンプルのみ
 - **外部依存は Jira / Confluence のみ**（Atlassian 認証を共通化）。他の MCP/SaaS 連携を前提にしない
@@ -38,7 +65,9 @@
 ## 非ゴール
 - Jira / Confluence / Slack への書き込み・自動投稿（L2 付与までは非ゴール）
 - チームメンバーへの展開、人事評価の自動判定
-- 実接続（現フェーズ）
+- 実接続（現フェーズ。接続コードを書くならインターフェースとモックまで）
+- Jira / Confluence 以外の外部サービス（他 MCP / SaaS）を前提にした設計
+- 人事評価・懲戒・報酬・採用判断・新規コミットの代行（L2 付与不可。常に EM 本人）
 
 ## 最初に作る機能（[12-secretary-job-list.md](12-secretary-job-list.md) §4 で見直し済み。順番は Q-015 で EM 確認）
 1. 朝の「今日の計画」（個人タスク + 期限 + ブロッカー + 会議準備 + 催促候補）
