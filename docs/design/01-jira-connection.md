@@ -36,3 +36,5 @@
 ## 未決事項
 - Cloud / Data Center、カスタムフィールド ID（story points / sprint）、対象プロジェクト
 - 組織のセキュリティポリシー上、API トークンの利用・保管が許可されているか（EM本人が確認）
+
+> キャッシュの詳細スキーマ・保持期間・削除は [06-cache-schema.md](06-cache-schema.md)、fetcher の責務境界は [07-fetcher-boundary.md](07-fetcher-boundary.md) を正とする（本書の「取得フィールド」「取得方式」の保存形式は 06 で上書き）。
