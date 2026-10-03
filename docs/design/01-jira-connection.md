@@ -4,7 +4,7 @@
 
 ## 認証
 - API トークン方式。トークンは**環境変数**で渡す（値はコード・設計書・コミット・ログに出さない）
-  - `JIRA_BASE_URL` / `JIRA_USER_EMAIL` / `JIRA_API_TOKEN`（Cloud: Basic 認証 email:token。Data Center の PAT なら Bearer。要確認）
+  - `JIRA_BASE_URL` / `JIRA_USER_EMAIL` / `JIRA_API_TOKEN`（Cloud: Basic 認証 email:token。Cloud 確定（Q-001）。Data Center は対象外）
 - トークンの権限は**読み取りのみ**のアカウント/スコープを推奨。最小のプロジェクト範囲に限定
 - ログ・エラー出力にトークン・Authorization ヘッダを出さない（マスク）
 
@@ -34,7 +34,7 @@
 3. 実 HTTP 実装（**GO 後のみ**）。接続テストは読み取り 1 クエリから
 
 ## 未決事項
-- Cloud / Data Center、カスタムフィールド ID（story points / sprint）、対象プロジェクト
+- カスタムフィールド ID（story points / sprint）、対象プロジェクト
 - 組織のセキュリティポリシー上、API トークンの利用・保管が許可されているか（EM本人が確認）
 
 > キャッシュの詳細スキーマ・保持期間・削除は [06-cache-schema.md](06-cache-schema.md)、fetcher の責務境界は [07-fetcher-boundary.md](07-fetcher-boundary.md) を正とする（本書の「取得フィールド」「取得方式」の保存形式は 06 で上書き）。

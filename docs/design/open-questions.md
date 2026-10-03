@@ -5,7 +5,7 @@ EM が決める論点をここに溜める。Ryoko が Slack に「選択肢2つ
 
 | ID | 論点 | 選択肢（2つ以内） | おすすめ | 期限 | 状態 |
 |---|---|---|---|---|---|
-| Q-001 | Jira / Confluence は Cloud か Data Center か | Cloud / Data Center | EM が会社で確認 | 実接続 GO 前 | 未回答。[09](09-go-checklist.md) B |
+| Q-001 | Jira / Confluence は Cloud か Data Center か | Cloud / Data Center | EM が会社で確認 | 実接続 GO 前 | **回答済み: Cloud**（EM・2026-10-03）。認証はメール + API トークン。[09](09-go-checklist.md) B1 / [01](01-jira-connection.md) / [02](02-confluence-input.md) に反映済み |
 | Q-002 | 最初に取り込む Confluence の範囲 | 議事録・レトロのみ / 仕様・意思決定記録も含む | 議事録・レトロのみ | 接続設計の確定前 | 未回答 |
 | Q-003 | 実接続 GO の前提: 会社ポリシー3点（個人 repo clone・データの Claude 処理・トークン発行） | 確認済み / 未確認 | — | 実接続 GO 前 | **一部回答済み**（EM・2026-10-03）: ①個人 repo は持ち込み不可 → 会社 Mac では参考にしつつ再構築 ②Jira の内容は Claude で処理可（Confluence / Slack は未確認）③トークンは発行可。ただし Claude から見えない運用が必須（EM 側に専用コマンド準備済み）。反映先は [09](09-go-checklist.md) A / [08](08-portability.md) |
 | Q-006 | Jira / Confluence キャッシュの保持期間（TTL） | 14日 / 30日 | 14日 | — | **回答済み: 14日**（EM・2026-10-03）。必要項目のみ保存・期限切れ自動削除。[06](06-cache-schema.md) / [ADR 0002](../adr/0002-cache-schema-and-retention.md) に反映済み |
