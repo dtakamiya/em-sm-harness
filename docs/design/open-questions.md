@@ -5,9 +5,9 @@ EM が決める論点をここに溜める。Ryoko が Slack に「選択肢2つ
 
 | ID | 論点 | 選択肢（2つ以内） | おすすめ | 期限 | 状態 |
 |---|---|---|---|---|---|
-| Q-001 | Jira / Confluence は Cloud か Data Center か | Cloud / Data Center | EM が会社で確認 | 実接続 GO 前 | 未回答 |
+| Q-001 | Jira / Confluence は Cloud か Data Center か | Cloud / Data Center | EM が会社で確認 | 実接続 GO 前 | 未回答。[09](09-go-checklist.md) B |
 | Q-002 | 最初に取り込む Confluence の範囲 | 議事録・レトロのみ / 仕様・意思決定記録も含む | 議事録・レトロのみ | 接続設計の確定前 | 未回答 |
-| Q-003 | 実接続 GO の前提: 会社ポリシー3点（個人 repo clone・データの Claude 処理・トークン発行） | 確認済み / 未確認 | — | 実接続 GO 前 | 未回答 |
+| Q-003 | 実接続 GO の前提: 会社ポリシー3点（個人 repo clone・データの Claude 処理・トークン発行） | 確認済み / 未確認 | — | 実接続 GO 前 | 未回答。確認項目は [09](09-go-checklist.md) A |
 | Q-006 | Jira / Confluence キャッシュの保持期間（TTL） | 14日 / 30日 | 14日 | — | **回答済み: 14日**（EM・2026-10-03）。必要項目のみ保存・期限切れ自動削除。[06](06-cache-schema.md) / [ADR 0002](../adr/0002-cache-schema-and-retention.md) に反映済み |
 | Q-007 | `structured/`（指標用の集計値）の保持期間 | a) 90日 / b) 14日 | a) | — | **回答済み: a)**（EM・2026-10-03）。90日保持・`assignee_ref` と遷移の個別履歴は持ち込まない。[06 §4](06-cache-schema.md) / [ADR 0002](../adr/0002-cache-schema-and-retention.md) に反映済み |
 | Q-008 | `summary` のキャッシュ保存の既定値 | a) 保存しない / b) 保存する | a) | — | **回答済み: a)**（EM・2026-10-03）。`store_summary` 既定は false。Q-003（会社ポリシー確認）後に変更したくなったら再相談 |
