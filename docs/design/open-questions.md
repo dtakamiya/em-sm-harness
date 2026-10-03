@@ -11,3 +11,5 @@ EM が決める論点をここに溜める。Ryoko が Slack に「選択肢2つ
 | Q-006 | Jira / Confluence キャッシュの保持期間（TTL） | 14日 / 30日 | 14日 | — | **回答済み: 14日**（EM・2026-10-03）。必要項目のみ保存・期限切れ自動削除。[06](06-cache-schema.md) / [ADR 0002](../adr/0002-cache-schema-and-retention.md) に反映済み |
 | Q-007 | `structured/`（指標用の集計値）の保持期間 | a) 90日 / b) 14日 | a) | — | **回答済み: a)**（EM・2026-10-03）。90日保持・`assignee_ref` と遷移の個別履歴は持ち込まない。[06 §4](06-cache-schema.md) / [ADR 0002](../adr/0002-cache-schema-and-retention.md) に反映済み |
 | Q-008 | `summary` のキャッシュ保存の既定値 | a) 保存しない / b) 保存する | a) | — | **回答済み: a)**（EM・2026-10-03）。`store_summary` 既定は false。Q-003（会社ポリシー確認）後に変更したくなったら再相談 |
+| Q-009 | 会社 Mac への repo の持ち込み経路（可搬性・emh-019） | 個人 repo を clone する / 会社が許す別経路（承認済みの配布手段）で持ち込む | Q-003（会社ポリシー確認）の回答に従う。clone 可なら clone（更新が `git pull` で済む） | 実接続 GO 前（Q-003 と同時） | 未回答 |
+| Q-010 | 現地 → 開発のフィードバックの運び方 | 匿名化した一言を EM が Ryoko に直接伝える / EM が feedback-inbox.md に追記して push | Ryoko に直接伝える（push 権限や会社ポリシーに依存しない） | 初回の現地運用開始前 | 未回答 |

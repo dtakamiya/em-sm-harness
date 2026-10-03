@@ -1,0 +1,23 @@
+# 現地設定の雛形（架空値のみ）。現地で `cp config/templates/local.yaml.example config/local.yaml` して埋める。
+# config/local.* は gitignore 済み。会社固有の値はコピー先にだけ書く。秘密値は書かない（Keychain）。
+schema_version: 1
+
+jira:
+  # 実接続は GO 前は無効のまま
+  enabled: false
+  base_url: "https://example.invalid"        # 現地で書き換える
+  project_keys: ["EXAMPLE"]                   # 対象プロジェクト（架空）
+  token_env: "JIRA_API_TOKEN"                 # 環境変数名のみ。値は Keychain から取得する想定
+
+confluence:
+  enabled: false
+  base_url: "https://example.invalid/wiki"
+  space_keys: ["EXAMPLE"]
+  token_env: "CONFLUENCE_API_TOKEN"
+
+leak_check:
+  # 社内ドメイン・プロジェクト名など「repo に出てはいけない語」の検出パターン（現地で追記）
+  deny_patterns: []
+
+feedback:
+  outbox: "data/feedback-outbox.md"
