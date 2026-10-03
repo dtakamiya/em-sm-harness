@@ -37,7 +37,7 @@ EM 側に取得コマンド（トークン使用）が準備済み（Q-003）。
 | 項目 | 06 のスキーマにある項目のみ。`additionalProperties: false`。値なしは `null`（`0` と区別） |
 | 禁止項目 | トークン・Authorization ヘッダ・認証付き URL・表示名・メール・コメント本文・description・添付。含まれていたらそのファイルは使わず EM に報告 |
 | 失敗時 | `complete: false` か、スキーマ不一致のファイルは**読まずに止まり**「再取得が必要」と報告（部分データで指標を断定しない） |
-| Slack | EM が貼った本文を `data/inbox/slack/YYYY-MM-DD-*.md` に保存（匿名化は取り込み時。[00](00-architecture.md)） |
+| Slack | EM が貼った本文を `data/inbox/slack/YYYY-MM-DD-*.md` に保存（匿名化ルールは emh-005 で設計中） |
 
 受け入れ確認（再構築後に 1 回）: 架空サンプルを 06 のスキーマに通し、①正常 ②`complete:false` ③禁止項目混入 ④`schema_version` 不一致 の 4 ケースが期待どおり（使う/使わない）になること。
 
