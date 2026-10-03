@@ -1,0 +1,6 @@
+# 実データ（Jira 取得結果・Slack 貼り付け・1on1 メモ・個人名を含む出力）は絶対にコミットしない
+data/
+*.env
+.env*
+secrets/
+.DS_Store
