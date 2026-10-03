@@ -25,7 +25,7 @@
 雛形は `config/templates/` に架空値で置く。現地では `cp config/templates/local.yaml.example config/local.yaml` して埋める（`config/local.*` は gitignore なので雛形名は `local.` で始めない）。
 
 ## 現地セットアップの流れ（目標形）
-1. repo を持ち込む（経路は Q-003 の会社ポリシー確認の回答に従う。Q-009 回答済み。Q-003 は未回答）
+1. ~~repo を持ち込む~~ → **個人 repo は会社 Mac に持ち込めない**（Q-003 回答）。設計書（`docs/` のみ）を持ち込み、会社 Mac 側の Claude が再構築する（Q-011=a）
 2. 雛形を `config/local.*` にコピーして埋める（会社固有値はここだけ）
 3. `data/` 配下のディレクトリを作る（`scripts/bootstrap`、未実装・backlog）
 4. 環境チェック（`scripts/check-env`、未実装・backlog）: 必要コマンド有無、`data/` と `config/local.*` が gitignore されているか、repo 内に秘密値らしき文字列が無いか
@@ -62,4 +62,5 @@
 ## 決定済み・未決（open-questions）
 - Q-009（持ち込み経路）: 回答済み。Q-003（会社ポリシー確認）の回答に従う
 - Q-010（フィードバックの運び方）: 回答済み。匿名化した一言を EM が Ryoko に直接伝える
-- 未決: Q-003（会社ポリシー確認）。回答までは持ち込み経路（clone 可否）も確定しない
+- Q-003: 一部回答済み（持ち込み不可・Jira 処理可・トークン発行可/Claude から不可視）。持ち込み不可により上の『clone だけで動く』『更新は git pull』は**そのままでは成立しない** → 再構築前提に読み替える。見直しは別 PR（次サイクルで着手）
+- Q-011=a（設計書のみ持ち込み・再構築）、Q-012=可 で確定
