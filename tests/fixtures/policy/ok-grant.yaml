@@ -1,0 +1,45 @@
+# 委任ポリシー（雛形・架空例のみ）。EM が編集する。設計: docs/design/03-secretary-model.md / 05-approval-and-audit.md / ADR 0001
+# 現フェーズは L1 まで。grants は空のまま = どの外部書込も EM 本人が送信・更新する。
+# 実際の付与状態は config/local.delegation.yaml（gitignore）に置く。この repo のファイルは種別とルールの雛形のみ。
+version: 1
+default: deny            # 書かれていない種別・タグは拒否（L1 の下書きとして提示するのみ）
+
+# 判定の入力は2軸: action（行き先と操作）× sensitivity タグ（内容の機微）
+# 判定順: (1) hard_deny タグ該当 → L2 不可 (2) タグ無し・不明 → L1 止まり (3) grants 不一致 → L1
+#         (4) reversible: false / audience が scope 外 → L1 止まり (5) 上限・期限・KILL・不在 → L1
+action_kinds:
+  jira.comment:       { default_level: L1, l2_eligible: false, note: "他人が読み EM の声に見える。永続 L1（EM 決定 2026-10-03）" }
+  jira.transition:    { default_level: L1, l2_eligible: false, note: "自動化の連鎖がある。永続 L1（EM 決定 2026-10-03）" }
+  jira.update_own_task: { default_level: L1, l2_eligible: false, note: "候補。EM が付与するまで L1" }
+  slack.send:         { default_level: L1, l2_eligible: true,  note: "自由文は L2 不可。テンプレ固定+宛先固定の定型のみ候補" }
+  confluence.update:  { default_level: L1, l2_eligible: false, note: "" }
+  # 以下は秘書自身のローカルデータ操作（外部書込でない）。承認不要・監査ログは取る
+  task.update:        { default_level: L0, l2_eligible: false, note: "個人タスク（data/tasks）の更新は秘書が直接行う" }
+
+# 内容に付くタグ。秘書が付ける。迷えば付ける（厳しい側）。タグ無しの外部書込は L1 止まり。
+sensitivity_tags: [none, hr_eval, discipline, comp, hiring, one_on_one_sensitive, new_commitment, escalation_upward]
+
+# L2 付与不可（理由付き）。grants がこれらに触れたら lint エラー（EM 編集でも昇格できない）
+hard_deny_tags:
+  hr_eval:              "人事評価は EM 本人の判断"
+  discipline:           "懲戒は EM 本人の判断"
+  comp:                 "報酬は EM 本人の判断"
+  hiring:               "採用判断は EM 本人の判断"
+  one_on_one_sensitive: "1on1 の機微な内容は共有先を EM が決める"
+  new_commitment:       "上長・他部門への新規の約束は EM 本人のみ"
+  escalation_upward:    "上長・他部門宛の連絡は EM の声として出す"
+
+# L2 付与。空 = 現状。付与は EM 自身が追記・コミットする。例（コメントアウト・架空）:
+# - action: slack.send
+#   max_level: L2
+#   scope: { template_id: weekly-reminder-v1, recipients: [team-channel-example] }   # 自由文は不可
+#   until: 2099-01-01              # 期限切れで自動的に L1 に戻る（fail-closed）
+#   daily_limit: 1                 # 超過分は承認キューに回す
+#   shadow_runs: 5                 # 初回 N 件は L1 のまま並走し、実績を見てから有効化
+grants:
+  - action: slack.send
+    max_level: L2
+    tags: [none]
+    scope: { template_id: weekly-reminder-v1, recipients: [team-channel-example] }
+    until: 2099-01-01
+    daily_limit: 1
