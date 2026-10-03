@@ -3,4 +3,5 @@ data/
 *.env
 .env*
 secrets/
+config/local.*
 .DS_Store
