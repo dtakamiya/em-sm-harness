@@ -1,8 +1,27 @@
 # 20. 委任ポリシーと現地設定のキー一覧（再構築用）
 
-- 根拠: [10 再構築ガイド](10-rebuild-guide.md) §5 のギャップ（emh-027）。`docs/` だけ持ち込んでも `policy/delegation.yaml` と `config/templates/local.yaml.example` を**この表から再生成できる**ことが目的
-- 食い違いを見つけたら**設計書が正**。開発側では `tests/test_design_keys.py` が、この表と実ファイルのキーが一致することを検査する（表を更新せずにキーだけ増やすとテストが落ちる）
+**結論: この表が正。`docs/` だけ持ち込んでも、ここから `policy/delegation.yaml` と `config/templates/local.yaml.example` を再生成できる。**
+
+## 目的と使い方
+- 根拠: [10 再構築ガイド](10-rebuild-guide.md) §5 のギャップ（emh-027。コードにしか無い仕様があると再構築で食い違う、という指摘）
+- 食い違いを見つけたら設計書が正。現地で補った仕様は匿名化した一言で開発側へ返す
 - 値はすべて架空。会社固有値は `config/local.*`（gitignore）にだけ書く
+
+## 用語（初出の説明）
+- **委任ラダー L0 / L1 / L2**（[03](03-secretary-model.md)）: L0=外部への書込でない（個人タスクの更新など。承認不要）/ L1=下書きまで（EM が自分で送信・更新する。**現在はここまで**）/ L2=EM が種別ごとに付与した範囲だけ秘書が実行
+- **hard_deny（ハードデナイ）**: どう設定しても L2 にできないタグ。人事評価など EM 本人の判断領域
+- **KILL**: `policy/KILL`（空ファイル）を置くと、付与済みの L2 も全て止まる非常停止
+- **ADR**: Architecture Decision Record。設計判断の記録。委任ポリシーの根拠は [ADR 0001](../adr/0001-delegation-policy-approval-audit.md)
+
+## 検査の範囲（事実）
+`tests/test_design_keys.py` が検査するのは次の範囲のみ。
+- §1 最上位キー、§2 `action_kinds` のキーと `default_level` / `l2_eligible`、§3 タグ、§5 の設定キーが、実ファイルと一致すること
+- 表から組み立てたポリシーが `scripts/policy_lint.py` を通ること（受け入れ基準。下記）
+
+**検査しない**: §4 `grants[]` の書式（実ファイルの grants は空のため突き合わせる対象が無い。書式の正しさは [16 policy lint](16-policy-lint.md) が grants 付与時に検査する）、`note` 等の文言、§5 の値。
+
+## 受け入れ基準
+`docs/` の表だけからポリシーを組み立て（`default: deny`・§2 の種別とレベル・§3 のタグ・`grants: []`）、`policy_lint` がエラー 0 で通ること。テストが機械的に確認する。
 
 ## 1. `policy/delegation.yaml` 最上位キー
 
@@ -74,4 +93,6 @@
 | `leak_check.deny_patterns` | list | `[]` | **現状どのスクリプトも読まない**（下記注） |
 | `feedback.outbox` | str | `data/feedback-outbox.md` | 秘書が EM の一言を追記する先（[08](08-portability.md)） |
 
-注: 持ち出し検知（[19](19-check-no-leak.md)）の社内固有パターンは実際には `config/local.leak-patterns.txt`（1 行 1 正規表現）を読む。`leak_check.deny_patterns` は雛形に残っているが未使用で、二重管理の元。どちらかに寄せる判断は EM 向けの論点（[open-questions](open-questions.md) 候補）。
+事実: 持ち出し検知（[19](19-check-no-leak.md)）の社内固有パターンは実際には `config/local.leak-patterns.txt`（1 行 1 正規表現）を読む。`leak_check.deny_patterns` は雛形に残っているが未使用。
+
+解釈: このままだと二重管理の元になる。どちらかに寄せる判断は [Q-024](open-questions.md) で EM に相談中。
