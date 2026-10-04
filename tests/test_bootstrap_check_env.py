@@ -1,6 +1,7 @@
 """bootstrap / check_env のテスト。git init した一時ディレクトリ（架空）で検証する。実 repo の data/ には触れない。"""
 import contextlib
 import io
+import re
 import shutil
 import stat
 import subprocess
@@ -71,6 +72,42 @@ class CheckEnvTest(TmpRepoCase):
         results = check_env.check_tools(version_info=(3, 8))
         self.assertFalse(results[0].ok)
 
+    def test_tracked_real_data_is_ng_with_filenames_only(self):
+        make_repo(self.root)
+        (self.root / "data").mkdir()
+        (self.root / "data" / "real.json").write_text("SECRET-CONTENT", encoding="utf-8")
+        (self.root / "config" / "local.yaml").write_text("SECRET-CONTENT", encoding="utf-8")
+        subprocess.run(["git", "add", "-f", "data/real.json", "config/local.yaml"], cwd=self.root, check=True)
+        code, out = run_main(check_env.main, self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("[NG] git 追跡済みの実データ 2 件", out)
+        self.assertIn("data/real.json", out)
+        self.assertIn("config/local.yaml", out)
+        self.assertNotIn("SECRET-CONTENT", out)
+
+    def test_no_tracked_data_is_ok(self):
+        make_repo(self.root)
+        self.assertTrue(all(r.ok for r in check_env.check_tracked_data(self.root)))
+
+    def test_loose_permissions_are_ng_with_chmod_hint_and_untouched(self):
+        make_repo(self.root)
+        (self.root / "data" / "tasks").mkdir(parents=True)
+        (self.root / "data").chmod(0o755)
+        (self.root / "data" / "tasks").chmod(0o700)
+        (self.root / "config" / "local.yaml").write_text("x: 1\n", encoding="utf-8")
+        (self.root / "config" / "local.yaml").chmod(0o644)
+        code, out = run_main(check_env.main, self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("[NG] data/ 権限 0700 -> EM がやること: chmod 700 data", out)
+        self.assertNotIn("data/tasks", out.split("権限 0700")[1].splitlines()[0])
+        self.assertIn("chmod 600 config/local.yaml", out)
+        self.assertEqual(stat.S_IMODE((self.root / "data").stat().st_mode), 0o755)
+
+    def test_strict_permissions_are_ok(self):
+        make_repo(self.root)
+        run_main(bootstrap.main, self.root)
+        self.assertTrue(all(r.ok for r in check_env.check_permissions(self.root)))
+
     def test_check_env_is_read_only(self):
         make_repo(self.root)
         before = sorted(p.relative_to(self.root).as_posix() for p in self.root.rglob("*") if ".git/" not in p.as_posix())
@@ -130,7 +167,8 @@ class BootstrapTest(TmpRepoCase):
     def test_data_dirs_only_those_in_design(self):
         design = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "docs" / "design").glob("*.md"))
         for d in check_env.DATA_DIRS:
-            self.assertIn(f"data/{d}", design, d)
+            # 直後が / 以外（data/state が data/state/proactive だけで通らない）
+            self.assertRegex(design, rf"data/{re.escape(d)}(?![\w-])(?!/[a-z])", d)
 
 
 if __name__ == "__main__":

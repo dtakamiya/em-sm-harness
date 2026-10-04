@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""現地環境チェック。gitignore・python/git・data/ の置き場・config/local.yaml を確認する。
+"""現地環境チェック。gitignore・追跡済み実データ・python/git・data/ の置き場と権限・config/local.yaml を確認する。
 
 設計: docs/design/08-portability.md（持ち出し事故の防止）・09 D2。読み取り専用・外部接続なし。
 終了コード: 0=全項目 OK / 1=NG あり。各行に「EM が次にやること」を1行で添える。
 """
 import argparse
+import os
 import shutil
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -31,6 +33,12 @@ DATA_DIRS = (
     "audit",
     "state",
 )
+
+# git に追跡されていてはいけないパス（gitignore は追跡済みファイルを守らない）
+TRACKED_FORBIDDEN = ("data", "config/local.*", ".env*", "secrets")
+
+DIR_MODE = 0o700  # 06-cache-schema §権限
+FILE_MODE = 0o600
 
 LOCAL_CONFIG = Path("config/local.yaml")
 LOCAL_CONFIG_EXAMPLE = Path("config/templates/local.yaml.example")
@@ -62,7 +70,7 @@ def check_tools(version_info=None):
         f"python3 を {MIN_PYTHON[0]}.{MIN_PYTHON[1]} 以上にする",
     )
     has_git = shutil.which("git") is not None
-    git = Result(has_git, "git の有在", "git を入れる（Xcode Command Line Tools: xcode-select --install）")
+    git = Result(has_git, "git の有無", "git を入れる（Xcode Command Line Tools: xcode-select --install）")
     return [py, git]
 
 
@@ -72,11 +80,48 @@ def check_gitignore(root):
     results = []
     for rel in MUST_IGNORE:
         ignored = _is_ignored(root, rel)
-        shown = rel.removesuffix("/x") + ("/" if rel.endswith("/x") else "")
+        shown = rel[: -len("/x")] + "/" if rel.endswith("/x") else rel
         if ignored is None:
             results.append(Result(False, f"gitignore: {shown}", "git repo か確認する（git init 済みの repo 直下で実行）"))
         else:
             results.append(Result(ignored, f"gitignore: {shown}", f".gitignore に {shown} を追加する（実データ混入防止）"))
+    return results
+
+
+def check_tracked_data(root):
+    """git ls-files で追跡済みの実データ・秘密置き場を検出する。ファイル名のみ出し、内容は読まない。"""
+    if shutil.which("git") is None:
+        return [Result(False, "git 追跡済みの実データ", "git を入れてから再実行する")]
+    try:
+        proc = subprocess.run(["git", "ls-files", "--", *TRACKED_FORBIDDEN], cwd=root, capture_output=True, text=True)
+    except OSError:
+        proc = None
+    if proc is None or proc.returncode != 0:
+        return [Result(False, "git 追跡済みの実データ", "git repo か確認する（git init 済みの repo 直下で実行）")]
+    tracked = [line for line in proc.stdout.splitlines() if line]
+    if not tracked:
+        return [Result(True, "git 追跡済みの実データ 0 件", "")]
+    shown = ", ".join(tracked[:5]) + (f" ほか {len(tracked) - 5} 件" if len(tracked) > 5 else "")
+    return [Result(False, f"git 追跡済みの実データ {len(tracked)} 件", f"git rm --cached で追跡から外し、コミット履歴に実データが残っていないか確認する（対象: {shown}）")]
+
+
+def _mode(path):
+    return stat.S_IMODE(os.stat(path).st_mode)
+
+
+def check_permissions(root):
+    """既存の data/（0700）と config/local.yaml（0600）の権限。直すのは EM（check_env も bootstrap も変更しない）。"""
+    root = Path(root)
+    bad_dirs = [
+        rel for rel in ("data", *(f"data/{d}" for d in DATA_DIRS))
+        if (root / rel).is_dir() and _mode(root / rel) != DIR_MODE
+    ]
+    local = root / LOCAL_CONFIG
+    results = []
+    dirs_cmd = "chmod 700 " + " ".join(bad_dirs)
+    results.append(Result(not bad_dirs, "data/ 権限 0700", "" if not bad_dirs else dirs_cmd))
+    local_ok = not local.is_file() or _mode(local) == FILE_MODE
+    results.append(Result(local_ok, f"{LOCAL_CONFIG} 権限 0600", "" if local_ok else f"chmod 600 {LOCAL_CONFIG}"))
     return results
 
 
@@ -95,7 +140,8 @@ def check_local_config(root):
 
 def run_checks(root=ROOT):
     root = Path(root)
-    return [*check_tools(), *check_gitignore(root), *check_data_dirs(root), *check_local_config(root)]
+    return [*check_tools(), *check_gitignore(root), *check_tracked_data(root),
+            *check_data_dirs(root), *check_permissions(root), *check_local_config(root)]
 
 
 def format_results(results):

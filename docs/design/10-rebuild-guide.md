@@ -48,7 +48,7 @@ EM 側に取得コマンド（トークン使用）が準備済み（Q-003）。
 3. `policy/delegation.yaml` を [03](03-secretary-model.md)・[05](05-approval-and-audit.md)・ADR 0001 から再生成（**grants は空**・default deny・hard_deny タグ）
 4. `config/templates/local.yaml.example` を作り、EM が `config/local.yaml` に会社固有値を記入
 5. `data/` 配下を作成（権限 0700、ファイル 0600、`umask 077`）
-6. 環境チェック（gitignore 有効・repo/設計書内に秘密値らしき文字列が無い）。開発側には `scripts/bootstrap.py` / `scripts/check_env.py` が作成済み（emh-024）。現地ではこの手順・[08](08-portability.md) の仕様から同等のものを作る（仕様: bootstrap=data/ 置き場作成 0700・local.yaml を雛形から複製・既存は上書きしない・最後に check_env。check_env=gitignore 5 パス・python3/git・data/ 置き場・local.yaml を確認し、NG ごとに EM の次の一手を 1 行出す・読み取り専用）
+6. 環境チェック（gitignore 有効・git 追跡済みの実データが無い・data/ と local.yaml の権限。秘密値らしき文字列の混入チェックは check_env ではなく `scripts/check_no_leak.py` の担当）。開発側には `scripts/bootstrap.py` / `scripts/check_env.py` が作成済み（emh-024）。現地ではこの手順・[08](08-portability.md) の仕様から同等のものを作る（仕様: bootstrap=data/ 置き場作成 0700・local.yaml を雛形から複製・既存は上書きしない・最後に check_env。check_env=gitignore 5 パス・python3/git・`git ls-files -- data 'config/local.*' '.env*' secrets` が 0 件（1 件でも追跡済みなら NG。gitignore は追跡済みファイルを守らない。ファイル名のみ表示し内容は出さない）・data/ 置き場・既存 data/ が 0700 かつ config/local.yaml が 0600（違えば NG で chmod を案内。bootstrap・check_env とも既存の権限は変えない）・local.yaml を確認し、NG ごとに EM の次の一手を 1 行出す・読み取り専用）
 7. §3 の受け入れ確認 → モック/貼り付けで日次の流れを 1 周（実接続なし）
 8. 実接続は [09](09-go-checklist.md) が全 ✅ で EM が GO と明示してから
 

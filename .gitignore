@@ -6,3 +6,5 @@ secrets/
 config/local.*
 .DS_Store
 .claude/settings.local.json
+__pycache__/
+*.pyc
