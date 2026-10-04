@@ -11,13 +11,15 @@ BANNED = re.compile(r"送信しました|更新しました|送りました")
 
 
 def blocks(text):
-    return re.findall(r"```\n(.*?)```", text, re.S)
+    return re.findall(r"^```[^\n]*\n(.*?)^```", text, re.S | re.M)
 
 
 class ApprovalQueueDocTest(unittest.TestCase):
     def setUp(self):
         self.text = DOC.read_text(encoding="utf-8")
-        self.template, self.sample = blocks(self.text)
+        found = blocks(self.text)
+        self.assertEqual(len(found), 2)
+        self.template, self.sample = found
 
     def test_template_and_sample_have_all_sections(self):
         for block in (self.template, self.sample):
@@ -59,6 +61,11 @@ class ApprovalQueueDocTest(unittest.TestCase):
         for word in ["非コミット", "コミット（A）", "コミット（B）", "コミット（C）"]:
             self.assertIn(word, self.text)
         self.assertIn("判定不能は **コミット扱い**", self.text)
+
+    def test_deadline_request_is_defined_as_stage_a(self):
+        self.assertIn("相手に期限を課す依頼", self.text)
+        self.assertIn("Q-025", self.text)
+        self.assertIn("未決事項・受け入れ基準", self.text)
 
 
 if __name__ == "__main__":
