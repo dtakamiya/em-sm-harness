@@ -53,6 +53,12 @@ class DraftTemplateTest(unittest.TestCase):
             self.assertLessEqual(len(re.findall(r"^\s*[①②③④]", sample, re.M)), 2, name)
             self.assertIn("共起", sample, name)
 
+    def test_meeting_minutes_has_three_headings(self):
+        text = self.read("meeting-minutes")
+        for heading in ["■ 決定事項", "■ 未決事項", "■ アクション"]:
+            self.assertIn(heading, blocks(text)[0])
+            self.assertIn(heading, blocks(text)[1])
+
     def test_sample_is_short_enough_to_read(self):
         for name in TEMPLATES:
             self.assertLessEqual(len(blocks(self.read(name))[1]), MAX_SAMPLE_CHARS, name)
