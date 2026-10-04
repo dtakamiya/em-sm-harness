@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 DIR = Path(__file__).resolve().parent.parent / "templates" / "drafts"
-TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "meeting-minutes"]
+TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "meeting-minutes", "retro-facilitation"]
 SECTIONS = ["## 必須項目", "## テンプレ", "## EM が直す手間を減らす工夫", "## 匿名化サンプル"]
 BANNER = "【下書き・未送信】"
 COMMIT_SLOT = "⟦EM"
@@ -42,13 +42,13 @@ class DraftTemplateTest(unittest.TestCase):
             self.assertIsNone(SENSITIVE.search(text), name)
 
     def test_people_related_templates_separate_fact_and_interpretation(self):
-        for name in ["one-on-one-agenda", "sprint-status-summary"]:
+        for name in ["one-on-one-agenda", "sprint-status-summary", "retro-facilitation"]:
             sample = blocks(self.read(name))[1]
             for word in FACT_INTERP:
                 self.assertIn(word, sample, name)
 
     def test_interpretations_at_most_two_and_cooccurrence_noted(self):
-        for name in ["one-on-one-agenda", "sprint-status-summary"]:
+        for name in ["one-on-one-agenda", "sprint-status-summary", "retro-facilitation"]:
             sample = blocks(self.read(name))[1]
             self.assertLessEqual(len(re.findall(r"^\s*[①②③④]", sample, re.M)), 2, name)
             self.assertIn("共起", sample, name)
@@ -58,6 +58,16 @@ class DraftTemplateTest(unittest.TestCase):
         for heading in ["■ 決定事項", "■ 未決事項", "■ アクション"]:
             self.assertIn(heading, blocks(text)[0])
             self.assertIn(heading, blocks(text)[1])
+
+    def test_retro_time_allocation_sums_to_total(self):
+        for block in blocks(self.read("retro-facilitation")):
+            total = re.search(r"（(\d+)分）", block)
+            parts = re.findall(r"(\d+)分 ", block)
+            if total is None or not parts:
+                total, parts = re.search(r"（\{分\}分）", block), re.findall(r"\{分\}分 ", block)
+                self.assertTrue(total and parts, "template placeholders")
+                continue
+            self.assertEqual(sum(map(int, parts)), int(total.group(1)))
 
     def test_sample_is_short_enough_to_read(self):
         for name in TEMPLATES:
