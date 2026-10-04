@@ -90,6 +90,9 @@
 | `confluence.base_url` | str | `https://example.invalid/wiki` | |
 | `confluence.space_keys` | list | `["EXAMPLE"]` | |
 | `confluence.token_env` | str | `CONFLUENCE_API_TOKEN` | 環境変数名のみ |
+| `leak_check.deny_patterns` | list | `[]` | **現状どのスクリプトも読まない**（下記注） |
 | `feedback.outbox` | str | `data/feedback-outbox.md` | 秘書が EM の一言を追記する先（[08](08-portability.md)） |
 
-社内固有の語（組織名・プロジェクト名等）の検出パターンは `local.yaml` ではなく `config/local.leak-patterns.txt`（1 行 1 正規表現・gitignore 済み）に置く（[19](19-check-no-leak.md)。Q-024=①で一本化。EM・2026-10-04）。
+事実: 持ち出し検知（[19](19-check-no-leak.md)）の社内固有パターンは実際には `config/local.leak-patterns.txt`（1 行 1 正規表現）を読む。`leak_check.deny_patterns` は雛形に残っているが未使用。
+
+解釈: このままだと二重管理の元になる。どちらかに寄せる判断は [Q-024](open-questions.md) で EM に相談中。

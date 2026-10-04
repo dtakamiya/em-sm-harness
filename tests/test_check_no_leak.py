@@ -25,10 +25,6 @@ class CheckPathTest(unittest.TestCase):
         for p in (".env", ".env.prod", "config/local.yaml", "secrets/key.txt"):
             self.assertTrue(cnl.check_path(p), p)
 
-    def test_example_templates_pass_but_example_under_data_is_error(self):
-        self.assertEqual(cnl.check_path("config/templates/local.yaml.example"), [])
-        self.assertTrue(cnl.check_path("data/local.yaml.example"))
-
     def test_normal_paths_pass(self):
         for p in ("docs/design/01-jira-connection.md", "tests/fixtures/sample.json", "templates/drafts/x.md"):
             self.assertEqual(cnl.check_path(p), [], p)

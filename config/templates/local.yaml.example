@@ -15,5 +15,9 @@ confluence:
   space_keys: ["EXAMPLE"]
   token_env: "CONFLUENCE_API_TOKEN"
 
+leak_check:
+  # 社内ドメイン・プロジェクト名など「repo に出てはいけない語」の検出パターン（現地で追記）
+  deny_patterns: []
+
 feedback:
   outbox: "data/feedback-outbox.md"

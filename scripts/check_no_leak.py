@@ -51,8 +51,6 @@ def check_path(path):
     if parts and parts[0] in FORBIDDEN_DIRS:
         return [Finding("error", "forbidden-path", path, f"{parts[0]}/ 配下は実データ置き場。コミットしない（git reset して除外）")]
     name = parts[-1] if parts else ""
-    if name.endswith(".example"):  # 雛形（架空値のみ）はコミットしてよい
-        return []
     if any(rx.search(name) for rx in FORBIDDEN_NAME_RES):
         return [Finding("error", "forbidden-path", path, "ローカル設定・環境変数ファイルはコミットしない")]
     return []
