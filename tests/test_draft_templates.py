@@ -59,6 +59,16 @@ class DraftTemplateTest(unittest.TestCase):
             self.assertIn(heading, blocks(text)[0])
             self.assertIn(heading, blocks(text)[1])
 
+    def test_retro_time_allocation_sums_to_total(self):
+        for block in blocks(self.read("retro-facilitation")):
+            total = re.search(r"（(\d+)分）", block)
+            parts = re.findall(r"(\d+)分 ", block)
+            if total is None or not parts:
+                total, parts = re.search(r"（\{分\}分）", block), re.findall(r"\{分\}分 ", block)
+                self.assertTrue(total and parts, "template placeholders")
+                continue
+            self.assertEqual(sum(map(int, parts)), int(total.group(1)))
+
     def test_sample_is_short_enough_to_read(self):
         for name in TEMPLATES:
             self.assertLessEqual(len(blocks(self.read(name))[1]), MAX_SAMPLE_CHARS, name)
