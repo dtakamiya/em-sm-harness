@@ -21,6 +21,16 @@
 - 外部ツール前提は Jira / Confluence + ローカル Markdown/JSON のみ
 - 人に関する出力は「観察された事実」と「解釈の候補」を分ける
 
+## セットアップ
+
+```
+python3 scripts/bootstrap.py   # data/ の置き場を作り、config/local.yaml を雛形から用意し、環境チェックまで実行（冪等・既存は上書きしない）
+python3 scripts/check_env.py   # 環境チェックだけ（読み取り専用）。NG には「EM がやること」が1行付く。終了コード 0=OK / 1=NG
+python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git add の後）
+```
+
+`config/local.yaml` に会社固有値を書く（gitignore 済み）。秘密値は書かない。
+
 ## ディレクトリ
 
 ```

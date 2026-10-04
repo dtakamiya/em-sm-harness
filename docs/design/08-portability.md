@@ -31,7 +31,7 @@
 1. 設計書（`docs/` のみ）を人手で会社 Mac に置く（経路は EM が会社ポリシーに沿って選ぶ。自動同期しない）
 2. 現地の Claude が 10 の読み順で設計書を読み、`policy/`・`config/templates/`・スクリプトを再生成する
 3. `config/local.*` を雛形から作って会社固有値を埋める（固有値はここだけ）。`data/` を作る
-4. 環境チェック（gitignore・秘密値の混入が無いか）。`scripts/bootstrap` / `check-env`（emh-024）は**再構築後に現地で作る**
+4. 環境チェック（gitignore・秘密値の混入が無いか）。`scripts/bootstrap.py`（置き場作成・local.yaml コピー・check_env 呼び出し。冪等・上書きしない）と `scripts/check_env.py`（読み取り専用）は作成済み（emh-024）。現地では設計書（本節・[10](10-rebuild-guide.md) §4）から同じ仕様で再生成する
 5. 取得コマンドは EM 側が準備済み。その出力を入力契約（10 §3）どおりに `data/` へ置く。実接続は [09](09-go-checklist.md) の GO 後
 
 ## 更新の流れ（git pull は使えない）
