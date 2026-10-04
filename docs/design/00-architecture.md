@@ -47,7 +47,7 @@ docs/design/       設計書（00〜13）・open-questions.md（EM 判断待ち�
 docs/adr/          設計判断の記録
 policy/            委任ポリシー（delegation.yaml。L2 は当面 0 件）
 config/templates/  設定の雛形（架空値のみ）。現地用は config/local.*（gitignore）
-scripts/           実装時に追加（bootstrap / check-env / check-no-leak 等。未作成）
+scripts/           実装時に追加（bootstrap / check-env 等。check_no_leak は作成済み）
 skills/            秘書スキル（SKILL.md）。実装時に追加（未作成）
 data/              実データ置き場（gitignore。inbox / jira-cache / confluence-cache /
                    structured / tasks / outputs / actions / audit）
