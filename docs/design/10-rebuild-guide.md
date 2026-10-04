@@ -16,7 +16,8 @@
 | 6 | [01-jira-connection](01-jira-connection.md)・[02-confluence-input](02-confluence-input.md) | 取得対象と変換ルール（実接続はしない） |
 | 7 | [04-personal-tasks](04-personal-tasks.md) | 個人タスクの形式と操作 |
 | 8 | [09-go-checklist](09-go-checklist.md) | 実接続 GO の条件（満たすまで実接続しない） |
-| 9 | [open-questions](open-questions.md) | 未回答の論点（勝手に決めない） |
+| 9 | [20-config-and-policy-keys](20-config-and-policy-keys.md) | `policy/` と `config/templates` の全キー表（再生成の正） |
+| 10 | [open-questions](open-questions.md) | 未回答の論点（勝手に決めない） |
 
 ## 2. 最初に守るルール
 開発側 CLAUDE.md は持ち込まれないため、**会社 Mac 側で `CLAUDE.md` を作り、次を必ず書く**。
@@ -53,6 +54,6 @@ EM 側に取得コマンド（トークン使用）が準備済み（Q-003）。
 
 ## 5. 設計書だけでは足りない点（既知のギャップ）
 持ち込みが `docs/` のみのため、コードにしか無い仕様は再構築で失われる。現時点で疑わしい箇所:
-- `policy/delegation.yaml` の `action_kinds` の個別設定は ADR 0001 と 03 に分散して書かれている。**再構築で食い違う恐れ** → 一覧表を設計書に集約する後続（emh-027 として起票）
-- `config/templates/local.yaml.example` のキー一覧は 06 / 01 / 02 に散在 → 同上
+- `policy/delegation.yaml` の `action_kinds` の個別設定は ADR 0001 と 03 に分散して書かれている。**再構築で食い違う恐れ** → [20](20-config-and-policy-keys.md) に集約済み（emh-027）
+- `config/templates/local.yaml.example` のキー一覧は 06 / 01 / 02 に散在 → 同上（[20](20-config-and-policy-keys.md) §5）
 - 食い違いを見つけたら**設計書が正**。現地で補った仕様は匿名化した一言で開発側へ返し、設計書に戻す
