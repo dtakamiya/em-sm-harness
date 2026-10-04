@@ -8,6 +8,7 @@ L1（下書きまで）。送信・更新は EM。品質基準は [14](../../doc
 | 1on1 アジェンダ | [one-on-one-agenda.md](one-on-one-agenda.md) | 作成済み |
 | スプリント状況サマリ | [sprint-status-summary.md](sprint-status-summary.md) | 作成済み |
 | ステークホルダー報告 | [stakeholder-report.md](stakeholder-report.md) | 作成済み |
-| Jira コメント案 / 議事録 / レトロ進行案 | — | 未着手（board の emh-028〜030） |
+| Jira コメント案 | [jira-comment.md](jira-comment.md) | 作成済み |
+| 議事録 / レトロ進行案 | — | 未着手（board の emh-029〜030） |
 
 共通ルール: 冒頭 `【下書き・未送信】` / 新規コミットは `⟦EM が決める⟧` 欄 / 事実と解釈の候補を分離 / 解釈は最大 2 つ / 末尾に匿名化サンプル。
