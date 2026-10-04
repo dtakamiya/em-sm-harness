@@ -48,5 +48,5 @@
 
 ## 5. 非ゴール・残る論点
 - 非ゴール: L2 の有効化、カレンダー操作の設計、テンプレ本文の作成
-- 「新規コミット」の検知基準（期限・約束表現の検出ルール）は未定義。[05 §4](05-approval-and-audit.md) と合流する別 backlog
+- 「新規コミット」の検知基準は [21](21-approval-queue.md) に定義済み
 - EM 回答: [open-questions.md](open-questions.md) Q-014 = b)（例外なし）
