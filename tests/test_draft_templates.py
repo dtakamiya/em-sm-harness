@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 DIR = Path(__file__).resolve().parent.parent / "templates" / "drafts"
-TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment"]
+TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "meeting-minutes"]
 SECTIONS = ["## 必須項目", "## テンプレ", "## EM が直す手間を減らす工夫", "## 匿名化サンプル"]
 BANNER = "【下書き・未送信】"
 COMMIT_SLOT = "⟦EM"
@@ -52,6 +52,12 @@ class DraftTemplateTest(unittest.TestCase):
             sample = blocks(self.read(name))[1]
             self.assertLessEqual(len(re.findall(r"^\s*[①②③④]", sample, re.M)), 2, name)
             self.assertIn("共起", sample, name)
+
+    def test_meeting_minutes_has_three_headings(self):
+        text = self.read("meeting-minutes")
+        for heading in ["■ 決定事項", "■ 未決事項", "■ アクション"]:
+            self.assertIn(heading, blocks(text)[0])
+            self.assertIn(heading, blocks(text)[1])
 
     def test_sample_is_short_enough_to_read(self):
         for name in TEMPLATES:
