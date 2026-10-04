@@ -55,7 +55,7 @@
 
 ## 持ち出し事故の防止
 - `.gitignore` が `data/` `config/local.*` `.env*` `secrets/` `.claude/settings.local.json` を除外していること（環境チェックで毎回確認）
-- コミット前チェック（`scripts/check-no-leak`、未実装・backlog。個人 Mac 側の開発用。会社 Mac は repo を持たないので、現地版は再構築後に位置づけ再検討）: staged に `data/` 配下があれば停止、トークン形式・社内ドメインらしき文字列があれば警告。社内ドメインの検出パターン自体は `config/local.*` に置く（repo に書かない）
+- コミット前チェック（`scripts/check_no_leak.py`、仕様は [19](19-check-no-leak.md)。個人 Mac 側の開発用。会社 Mac は repo を持たないので、現地版は再構築後に位置づけ再検討）: staged に `data/` 配下・トークン形式があれば停止、社内ドメインらしき文字列があれば警告。社内ドメインの検出パターン自体は `config/local.*` に置く（repo に書かない）
 - 出力物（`data/outputs/`）を外部に貼る時は EM が読んでから。秘書は貼らない
 
 ## 非ゴール
