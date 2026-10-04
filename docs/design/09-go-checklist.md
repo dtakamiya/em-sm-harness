@@ -54,7 +54,7 @@ EM 回答により必須。設計への帰結:
 | # | 条件 | 状態 |
 |---|---|---|
 | D1 | 会社固有値は `config/local.*` のみ。雛形は `config/templates/` の架空値 | 方針確定（08） |
-| D2 | `data/` `config/local.*` `.env*` `secrets/` が gitignore 済み | 済（`scripts/check-env` で毎回確認予定 = emh-024） |
+| D2 | `data/` `config/local.*` `.env*` `secrets/` が gitignore 済み | 済（`scripts/check_env.py` で毎回確認。追跡済み実データも git ls-files で検知。作成済み = emh-024） |
 | D3 | コミット前の持ち出し検知 | `scripts/check_no_leak.py`（[19](19-check-no-leak.md)・emh-025） |
 | D4 | 取得は読み取りのみ。書込メソッドは実装自体を持たない（コード・設定とも） | 設計済み（01/02/07） |
 | D5 | キャッシュ TTL 14 日・必要項目のみ・自動削除 | 確定（Q-006、06） |
