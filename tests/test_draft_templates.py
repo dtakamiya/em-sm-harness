@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 DIR = Path(__file__).resolve().parent.parent / "templates" / "drafts"
-TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "meeting-minutes"]
+TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "meeting-minutes", "retro-facilitation"]
 SECTIONS = ["## 必須項目", "## テンプレ", "## EM が直す手間を減らす工夫", "## 匿名化サンプル"]
 BANNER = "【下書き・未送信】"
 COMMIT_SLOT = "⟦EM"
@@ -42,13 +42,13 @@ class DraftTemplateTest(unittest.TestCase):
             self.assertIsNone(SENSITIVE.search(text), name)
 
     def test_people_related_templates_separate_fact_and_interpretation(self):
-        for name in ["one-on-one-agenda", "sprint-status-summary"]:
+        for name in ["one-on-one-agenda", "sprint-status-summary", "retro-facilitation"]:
             sample = blocks(self.read(name))[1]
             for word in FACT_INTERP:
                 self.assertIn(word, sample, name)
 
     def test_interpretations_at_most_two_and_cooccurrence_noted(self):
-        for name in ["one-on-one-agenda", "sprint-status-summary"]:
+        for name in ["one-on-one-agenda", "sprint-status-summary", "retro-facilitation"]:
             sample = blocks(self.read(name))[1]
             self.assertLessEqual(len(re.findall(r"^\s*[①②③④]", sample, re.M)), 2, name)
             self.assertIn("共起", sample, name)
