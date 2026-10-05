@@ -32,6 +32,16 @@ def _read(path, default):
         raise ReplyError(f"{path.name} が壊れています（{exc.msg}）。.bak からの復元を提案します。上書きはしません")
 
 
+def _read_list(path, key):
+    """{key: [ {id,...}, ... ]} 形式を検証して返す。不正なら上書きせず止まる。"""
+    data = _read(path, {key: []})
+    items = data.get(key) if isinstance(data, dict) else None
+    ok = isinstance(items, list) and all(isinstance(i, dict) and ("id" in i or key == "rejected") for i in items)
+    if not ok:
+        raise ReplyError(f"{path.name} の形式が不正です（{key} の配列が必要）。.bak からの復元を提案します。上書きはしません")
+    return items
+
+
 def _sha(path):
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
 
@@ -73,7 +83,7 @@ def parse(line):
 def _next_task_id(tasks, archive_dir):
     ids = [t["id"] for t in tasks]
     for f in sorted(archive_dir.glob("*.json")) if archive_dir.exists() else []:
-        ids += [t["id"] for t in _read(f, {}).get("tasks", [])]
+        ids += [t["id"] for t in _read_list(f, "tasks")]
     return "t-{:04d}".format(max((int(i.split("-")[1]) for i in ids), default=0) + 1)
 
 
@@ -97,7 +107,7 @@ def apply_one(state, op, target, extra, today, archive_dir):
         rest = [c for c in cands if c["id"] != target]
         if op == "reject":
             entry = {"source": cand.get("source"), "source_ref": cand.get("source_ref"), "at": today.isoformat()}
-            return {**state, "candidates": rest, "rejected": [*rejected, entry]}, f"✗ {target} 却下（同じ出典は再提案しない）"
+            return {**state, "candidates": rest, "rejected": [*rejected, entry]}, f"✗ {target} 却下（出典を記録。再提案の抑止は未実装）"
         if op == "later":
             until = _day(extra[0], "日付") if extra else today + timedelta(days=LATER_DAYS)
             kept = [{**c, "snooze_until": until.isoformat()} if c["id"] == target else c for c in cands]
@@ -129,17 +139,22 @@ def apply_one(state, op, target, extra, today, archive_dir):
 
 
 ACTOR = "secretary"
-CAND_OPS = ("adopt", "reject", "later")
 
 
-def _audit_rows(now, batch_id, parsed, before, after):
+OP_FILES = {"adopt": ("tasks.json", "candidates.json"), "reject": ("candidates.json", "rejected.json"),
+            "later": ("candidates.json",), "done": ("tasks.json",), "defer": ("tasks.json",)}
+
+
+def _audit_rows(now, batch_id, parsed, before, after, new_ids):
+    """操作ごとに、実際に変わったファイルとその前後ハッシュを記録する（本文は入れない）。"""
     base = {"ts": now.isoformat(timespec="seconds"), "event": "task_updated", "action": "task.update",
             "actor": ACTOR, "level_applied": "L0", "batch_id": batch_id}
     rows = []
-    for op, target, _ in parsed:
-        file = "candidates.json" if op in CAND_OPS else "tasks.json"
-        rows.append({**base, "op": op, "target_id": target, "file": file,
-                     "before_sha256": before[file], "after_sha256": after[file]})
+    for i, (op, target, _) in enumerate(parsed):
+        changes = [{"file": f, "before_sha256": before[f], "after_sha256": after[f]}
+                   for f in OP_FILES[op] if before[f] != after[f]]
+        extra = {"new_task_id": new_ids[i]} if i in new_ids else {}
+        rows.append({**base, "op": op, "target_id": target, **extra, "changes": changes})
     return rows
 
 
@@ -167,12 +182,14 @@ def apply_replies(data_dir, lines, today, now=None, dry_run=False):
     parsed = [parse(line) for line in lines]
     if not parsed:
         raise ReplyError("返答がありません")
-    state = {"tasks": _read(tasks_dir / "tasks.json", {"tasks": []})["tasks"],
-             "candidates": _read(tasks_dir / "candidates.json", {"candidates": []})["candidates"],
-             "rejected": _read(tasks_dir / "rejected.json", {"rejected": []})["rejected"]}
-    results = []
-    for op, target, extra in parsed:
+    state = {key: _read_list(tasks_dir / f"{key}.json", key) for key in ("tasks", "candidates", "rejected")}
+    results, new_ids = [], {}
+    for i, (op, target, extra) in enumerate(parsed):
+        known = {t["id"] for t in state["tasks"]}
         state, line = apply_one(state, op, target, extra, today, tasks_dir / "archive")
+        created = [t["id"] for t in state["tasks"] if t["id"] not in known]
+        if created:
+            new_ids[i] = created[0]
         results.append(line)
     if dry_run:
         return results
@@ -191,7 +208,7 @@ def apply_replies(data_dir, lines, today, now=None, dry_run=False):
                   {"batch_id": batch_id, "existed": existed, "before": before, "after": after})
     for n in TRACKED:
         _atomic_write_bytes(tasks_dir / n, payload[n])
-    _append_audit(audit_dir, now, _audit_rows(now, batch_id, parsed, before, after))
+    _append_audit(audit_dir, now, _audit_rows(now, batch_id, parsed, before, after, new_ids))
     return results
 
 
@@ -215,6 +232,8 @@ def undo(data_dir, force=False, now=None):
     manifest = _read(tasks_dir / UNDO_MANIFEST, None)
     if manifest is None:
         raise ReplyError("戻せる直前の返答反映がありません")
+    if not isinstance(manifest, dict) or not {"batch_id", "existed", "before", "after"} <= manifest.keys():
+        raise ReplyError(f"{UNDO_MANIFEST} の形式が不正です。戻せないため何も触りません")
     _check_undo_preconditions(tasks_dir, manifest, force)
     _ensure_audit_writable(audit_dir, now)
     for n in TRACKED:
@@ -247,6 +266,8 @@ def main(argv=None):
     data_dir = Path(args.data_dir)
     if args.undo and args.replies:
         ap.error("--undo と返答は同時に指定できません")
+    if args.undo and args.dry_run:
+        ap.error("--undo と --dry-run は同時に指定できません（取り消しは確認なしで実行されるため）")
     if args.force and not args.undo:
         ap.error("--force は --undo と一緒に指定してください")
     try:
