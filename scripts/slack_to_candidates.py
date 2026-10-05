@@ -3,7 +3,8 @@
 
 ローカルのみ・stdlib のみ・外部接続なし。設計: docs/design/13-slack-paste-input.md §9。
 対象は kind=request かつ to_em=true かつ confidence が high/medium の項目だけ。
-全件検証してから書く（1件でも不正なら何も書かない）。更新前は .bak に退避する。
+全件検証してから書く（1件でも不正なら何も書かない）。更新前は candidates.json.pre-slack.bak に退避する
+（apply_reply.py --undo の candidates.json.bak とは別名。互いに上書きしない）。
 """
 import argparse
 import json
@@ -16,6 +17,7 @@ ACCEPTED_CONFIDENCE = ("high", "medium")
 TITLE_MAX = 80
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ID_NUMBER = re.compile(r"^c-(\d+)$")
+BACKUP_NAME = "candidates.json.pre-slack.bak"  # apply_reply.py の .bak とは別名
 REQUIRED_ITEM_KEYS = ("id", "kind", "observation", "confidence")
 
 
@@ -37,7 +39,7 @@ def _read_list(path, key):
         return []
     data = _read_json(path, path.name)
     items = data.get(key) if isinstance(data, dict) else None
-    if not isinstance(items, list):
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
         raise IngestError(f"{path.name} の形式が不正です（{key} の配列が必要）。上書きはしません")
     return items
 
@@ -49,13 +51,19 @@ def validate(structured):
     if structured.get("skipped"):
         raise IngestError(f"skipped={structured['skipped']} のファイルは取り込みません")
     items = structured.get("items")
-    source_file = (structured.get("source") or {}).get("file")
-    if not isinstance(items, list) or not source_file:
-        raise IngestError("source.file と items が必要です")
+    source = structured.get("source")
+    source_file = source.get("file") if isinstance(source, dict) else None
+    if not isinstance(items, list) or not isinstance(source_file, str) or not source_file:
+        raise IngestError("source（file を持つ object）と items（配列）が必要です")
     for item in items:
+        if not isinstance(item, dict):
+            raise IngestError("items の要素が object ではありません")
         missing = [k for k in REQUIRED_ITEM_KEYS if k not in item]
         if missing:
             raise IngestError(f"item {item.get('id', '?')} に必須項目がありません: {', '.join(missing)}")
+        wrong = [k for k in ("id", "observation", "confidence") if not isinstance(item[k], str)]
+        if wrong:
+            raise IngestError(f"item {item['id']!s} の {', '.join(wrong)} が文字列ではありません")
         if item["kind"] == "request" and not isinstance(item.get("to_em"), bool):
             raise IngestError(f"item {item['id']} の to_em が真偽値ではありません")
     return source_file, items
@@ -100,9 +108,9 @@ def build_candidates(source_file, items, known_refs, start_number):
     return fresh, counts
 
 
-def _atomic_write(path, data):
+def _atomic_write_bytes(path, content):
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    tmp.write_bytes(content)
     os.replace(tmp, path)
 
 
@@ -118,8 +126,9 @@ def ingest(structured_path, tasks_dir, dry_run):
     if fresh and not dry_run:
         tasks_dir.mkdir(parents=True, exist_ok=True)
         if cand_path.exists():
-            (tasks_dir / "candidates.json.bak").write_bytes(cand_path.read_bytes())
-        _atomic_write(cand_path, {"version": 1, "candidates": [*candidates, *fresh]})
+            _atomic_write_bytes(tasks_dir / BACKUP_NAME, cand_path.read_bytes())
+        body = json.dumps({"version": 1, "candidates": [*candidates, *fresh]}, ensure_ascii=False, indent=1) + "\n"
+        _atomic_write_bytes(cand_path, body.encode("utf-8"))
     return fresh, counts
 
 

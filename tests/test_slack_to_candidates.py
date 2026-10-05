@@ -88,7 +88,36 @@ class SlackToCandidatesTest(unittest.TestCase):
         sc.ingest(self.write_structured(structured([request("s-01")])), self.dir, False)
         before = (self.dir / "candidates.json").read_bytes()
         sc.ingest(self.write_structured(structured([request("s-02")])), self.dir, False)
-        self.assertEqual((self.dir / "candidates.json.bak").read_bytes(), before)
+        self.assertEqual((self.dir / "candidates.json.pre-slack.bak").read_bytes(), before)
+
+    def test_wrong_typed_input_is_rejected_without_traceback_or_writing(self):
+        bad = [{"schema_version": 1, "source": {"file": "f.md"}, "skipped": None, "items": [1]},
+               {"schema_version": 1, "source": "x", "skipped": None, "items": [request()]},
+               structured([request(observation=None)]),
+               structured([request(id=5)]),
+               structured([request(confidence=["high"])])]
+        for data in bad:
+            with self.assertRaises(sc.IngestError):
+                sc.ingest(self.write_structured(data), self.dir, False)
+            self.assertFalse((self.dir / "candidates.json").exists())
+
+    def test_non_dict_entries_in_existing_files_are_rejected_without_overwrite(self):
+        original = json.dumps({"candidates": [1]})
+        (self.dir / "candidates.json").write_text(original, encoding="utf-8")
+        with self.assertRaises(sc.IngestError):
+            sc.ingest(self.write_structured(structured([request()])), self.dir, False)
+        self.assertEqual((self.dir / "candidates.json").read_text(encoding="utf-8"), original)
+
+    def test_cli_wrong_typed_input_exits_nonzero_without_traceback(self):
+        path = self.write_structured(structured([request(observation=None)]))
+        self.assertEqual(sc.main([str(path), "--tasks-dir", str(self.dir)]), 1)
+
+    def test_apply_reply_backup_is_not_overwritten(self):
+        sc.ingest(self.write_structured(structured([request("s-01")])), self.dir, False)
+        reply_bak = self.dir / "candidates.json.bak"
+        reply_bak.write_bytes(b"reply-undo-state")
+        sc.ingest(self.write_structured(structured([request("s-02")])), self.dir, False)
+        self.assertEqual(reply_bak.read_bytes(), b"reply-undo-state")
 
     def test_invalid_input_stops_without_writing(self):
         bad = [structured([{"id": "s-01", "kind": "request"}]),

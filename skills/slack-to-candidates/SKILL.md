@@ -10,7 +10,7 @@ description: 匿名化・構造化済みの Slack 貼り付け（structured JSON
 ## 手順
 1. 構造化 JSON（`data/structured/slack/<file>.json`、匿名化済みのみ）を用意する。作り方は 13 §4〜§6・23 に従う（実名・原文は書かない）
 2. `python3 scripts/slack_to_candidates.py <file>.json --dry-run` で追加予定を見せる
-3. EM が問題なければ `--dry-run` を外して実行する（`data/tasks/candidates.json` に追記。直前は `.bak`）
+3. EM が問題なければ `--dry-run` を外して実行する（`data/tasks/candidates.json` に追記。直前の内容は `candidates.json.pre-slack.bak` に退避。返答反映の `.bak` とは別名）
 4. 結果の 1 行をそのまま EM に返す。候補の採用/却下は朝の計画（`morning-plan`）で聞く
 
 ## 取り込む条件（13 §9）
