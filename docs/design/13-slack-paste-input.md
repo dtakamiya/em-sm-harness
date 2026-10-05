@@ -77,7 +77,7 @@ Bob Sample  10:40
 | `evidence` | `msg_index`（貼り付け内の通し番号）+ `quote`（原文の一部。**40 字以内**）。引用できない抽出は出さない |
 | `actors` | ハンドルのみ。実名・表示名は入れない |
 | `confidence` | `high`（明示的な表現）/ `medium` / `low`（文脈からの推定）。`low` は `candidates.json` に自動で流さない |
-| `interpretation_candidates[]` | 解釈の候補（最大 2 つ）。`risk` / `signal` のみ許可。事実欄とは別に置く |
+| `interpretation_candidates[]` | 解釈の候補。`signal` は**ちょうど 2 つ**、`risk` は 0〜2 つ、他の種別は空。事実欄とは別に置く |
 
 ### 種別ごとの追加項目と抽出ルール
 | kind | 追加項目 | ルール |
@@ -86,7 +86,7 @@ Bob Sample  10:40
 | `request` | `to_em`(bool)、`due_raw`、`answered_in_thread` | 日付が解釈できても `due_raw` は原文のまま。**日付化は candidates 作成時に行い、曖昧なら null**。EM 宛てでない依頼は `to_em: false` で記録（先回り検知用） |
 | `risk` | `likelihood_hint` を持たない | 将来への懸念の**発言そのもの**を記録。発言者の見立てと事実を混ぜない。「リスクがある」と秘書が断定しない |
 | `blocker` | `blocked_what_raw`、`jira_keys[]` | 「待ち・止まっている」と本人が述べているものに限る |
-| `signal` | `signal_type`（`fatigue`/`frustration`/`confusion`/`positive`/`other`）、`interpretation_candidates` 必須 | §7 の規則に従う |
+| `signal` | `signal_type`（`fatigue`/`frustration`/`confusion`/`positive`/`other`）、`interpretation_candidates` 2 つ必須 | §7 の規則に従う |
 
 ### 共通禁止事項
 - 原文にないことを補わない（担当・期限・理由の推測を書かない。空欄 + `notes`）
@@ -99,7 +99,7 @@ Bob Sample  10:40
 - `interpretation_candidates` に**複数の解釈**を並べる（例: 「直近の負荷が高い可能性」「たまたま今回だけの作業」）。確かめ方（1on1 で聞く等）を 1 つ添えてよい
 - **個人別の時系列を作らない**。`signal` を人ごとに集計・蓄積・比較する処理は実装しない。`structured/` に残る `signal` は 14 日で削除（本文由来の引用を含むため。06 §4 の「本文を含む派生物は 14 日」を適用）
 - 出力に出すときは「観察 → 解釈の候補 → 確かめ方」の順。1on1 の機微な共有・人事評価に使う経路は作らない（EM 本人のみ）
-- 既定は抽出する。EM がオフにできる（`extract_signals: false`）。EM 判断は Q-017
+- 既定は抽出する。EM がオフにできる（`extract_signals: false`）。Q-017 は回答済み: a（既定で抽出・個人別集計なし）2026-10-04
 
 ## 8. 保持と機微の扱い
 | 対象 | 保持 | 備考 |
@@ -124,6 +124,7 @@ Bob Sample  10:40
 4. candidates 連携（04）
 
 ## 11. 未決事項
-- Slack 貼り付けの保持期間（Q-016）、`signal` 抽出の既定（Q-017）
+- Slack 貼り付けの保持期間（Q-016）
+- `signal` 抽出の既定（Q-017）は回答済み: a（既定で抽出・個人別集計なし）2026-10-04
 - 実際のコピー形式が §4 の想定と違う場合は、EM が匿名化した数行の見本を示す（Q-013 と同様の差分確認）。それまでは緩い解釈で吸収
-- 抽出観点の詳細と架空サンプルでの抽出例は emh-006
+- 抽出観点の詳細と架空サンプルでの抽出例は [23](23-slack-extraction-guide.md)（emh-006）
