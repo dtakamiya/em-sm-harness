@@ -61,3 +61,15 @@
 ## 7. 未決事項
 - `signal` の抽出既定は Q-017 で回答済み: a（既定で抽出・個人別集計なし）2026-10-04。本書はそれに従う
 - 実際の Slack コピー形式が 13 §4 と違う場合の見本確認は Q-013 と同様
+
+## 8. 自動評価（emh-031）
+抽出スキルの出力を期待値と突き合わせ、改善ループの物差しにする。ローカルのみ・読み取り専用。
+
+```
+python3 scripts/eval_slack_extraction.py <構造化 JSON またはディレクトリ> [--expected tests/fixtures/slack-extraction/expected.json] [--min-recall 0.8] [--max-extra 0]
+```
+- 突き合わせの鍵は `(kind, evidence.msg_index, actors.from)`。文言（`observation` / `quote`）の揺れは数えない
+- 出力: 再現率（期待のうち拾えた割合）・誤抽出（期待にない item の件数。うち `excluded` の発言から出たもの）・精度・`confidence` / `to_em` の食い違い件数
+- 終了コード: 0=OK / 1=`--min-recall` または `--max-extra` の基準割れ / 2=入力不正
+- 同梱の `skills/slack-to-candidates/examples/` は再現率 100%・誤抽出 0 が基準（回帰の確認）
+- 限界: 期待値は架空サンプル 2 件・計 6 item。判定の鍵が粗いので、品質の最終判断は §6 のチェックと EM のレビューで行う
