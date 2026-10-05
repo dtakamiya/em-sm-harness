@@ -1,0 +1,96 @@
+{
+ "schema_version": 1,
+ "source": {
+  "file": "2026-10-07-ex-team-02.md",
+  "channel_alias": "ex-team",
+  "thread": true,
+  "message_count": 3
+ },
+ "extracted_at": "2026-10-05T09:00:00+09:00",
+ "skipped": null,
+ "items": [
+  {
+   "id": "s-01",
+   "kind": "decision",
+   "actors": {
+    "from": "m_b2b2b2",
+    "to": []
+   },
+   "observation": "EX-102 を次スプリントに回すと述べている。承認者として m_a1a1a1 が挙がっている",
+   "evidence": {
+    "msg_index": 1,
+    "quote": "EX-102 は次スプリントに回します"
+   },
+   "decided_by": [
+    "m_a1a1a1"
+   ],
+   "scope_raw": "EX-102 の次スプリント送り",
+   "jira_keys": [
+    "EX-102"
+   ],
+   "confidence": "high",
+   "interpretation_candidates": []
+  },
+  {
+   "id": "s-02",
+   "kind": "signal",
+   "signal_type": "fatigue",
+   "actors": {
+    "from": "m_c3c3c3",
+    "to": []
+   },
+   "observation": "「また夜中までかかりました」と発言している",
+   "evidence": {
+    "msg_index": 2,
+    "quote": "また夜中までかかりました"
+   },
+   "confidence": "medium",
+   "interpretation_candidates": [
+    "直近の作業負荷が高い状態が続いている可能性",
+    "今回の作業だけが長引いた可能性"
+   ],
+   "check_hint": "1on1 などで直近の負荷を本人に聞いて確かめる"
+  },
+  {
+   "id": "s-03",
+   "kind": "risk",
+   "actors": {
+    "from": "m_a1a1a1",
+    "to": []
+   },
+   "observation": "来週のリリース判断にリスクが残っている気がする、と述べている",
+   "evidence": {
+    "msg_index": 3,
+    "quote": "リスクが残っている気がします"
+   },
+   "confidence": "medium",
+   "interpretation_candidates": [
+    "未解消の懸念が実際に残っている可能性",
+    "確認不足による不安で、事実としての問題はまだ無い可能性"
+   ]
+  },
+  {
+   "id": "s-04",
+   "kind": "request",
+   "to_em": true,
+   "actors": {
+    "from": "m_a1a1a1",
+    "to": [
+     "em"
+    ]
+   },
+   "observation": "リリース判断について em に相談できるか尋ねている",
+   "evidence": {
+    "msg_index": 3,
+    "quote": "em さん、相談できますか"
+   },
+   "due_raw": null,
+   "answered_in_thread": false,
+   "confidence": "medium",
+   "interpretation_candidates": []
+  }
+ ],
+ "jira_keys": [],
+ "unmasked_suspects": 0,
+ "notes": []
+}

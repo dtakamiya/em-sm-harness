@@ -1,0 +1,55 @@
+{
+ "schema_version": 1,
+ "source": {
+  "file": "2026-10-05-ex-team-01.md",
+  "channel_alias": "ex-team",
+  "thread": true,
+  "message_count": 3
+ },
+ "extracted_at": "2026-10-05T09:00:00+09:00",
+ "skipped": null,
+ "items": [
+  {
+   "id": "s-01",
+   "kind": "request",
+   "to_em": true,
+   "actors": {
+    "from": "m_b2b2b2",
+    "to": [
+     "em"
+    ]
+   },
+   "observation": "金曜までに決めたい、と em に確認を求めている",
+   "evidence": {
+    "msg_index": 2,
+    "quote": "金曜までに決めたいです"
+   },
+   "due_raw": "金曜まで",
+   "answered_in_thread": false,
+   "confidence": "high",
+   "interpretation_candidates": []
+  },
+  {
+   "id": "s-02",
+   "kind": "blocker",
+   "actors": {
+    "from": "m_c3c3c3",
+    "to": []
+   },
+   "observation": "EX-101 が staging のデータ待ちで止まっている、と述べている",
+   "evidence": {
+    "msg_index": 3,
+    "quote": "staging のデータ待ちで止まっています"
+   },
+   "blocked_what_raw": "EX-101",
+   "jira_keys": [
+    "EX-101"
+   ],
+   "confidence": "high",
+   "interpretation_candidates": []
+  }
+ ],
+ "jira_keys": [],
+ "unmasked_suspects": 0,
+ "notes": []
+}

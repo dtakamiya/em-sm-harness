@@ -111,7 +111,7 @@ Bob Sample  10:40
 - 失敗時は部分出力しない（スキーマ検証失敗＝何も書かず、件数と理由だけ報告）
 
 ## 9. 下流との接続
-- **個人タスク**: `kind: request` かつ `to_em: true` かつ `confidence ≥ medium` → `candidates.json`。`source: slack`、`source_ref` はファイル名 + `item id` のみ（本文は写さない）。`due` は `due_raw` が確定日として読める場合のみ、それ以外は null
+- **個人タスク**: `kind: request` かつ `to_em: true` かつ `confidence ≥ medium` → `candidates.json`（アトミックに書き、更新前は `candidates.json.pre-slack.bak` に退避。24 の `--undo` が使う `.bak` とは別名で互いに上書きしない。型不正の入力は理由つきで拒否し何も書かない）。`source: slack`、`source_ref` はファイル名 + `item id` のみ（本文は写さない）。`due` は `due_raw` が確定日として読める場合のみ、それ以外は null
 - **先回り検知**（[12](12-secretary-job-list.md) §4 ③ 返信待ち・放置）: `to_em: false` かつ `answered_in_thread: false` の依頼は「放置候補」の入力
 - **返信案**: 匿名化済みの構造化データ + 必要なら原文の該当メッセージのみを入力に、ローカルで実名へ戻して下書きを作る。送信は EM（L1）
 - **送信結果の照合**（[05](05-approval-and-audit.md)）: 次回の貼り付けで、下書きと一致する発言があれば「送信済みの可能性」と推定する
@@ -121,7 +121,7 @@ Bob Sample  10:40
 1. 前処理・匿名化スクリプト（ローカル決定的）+ 架空サンプル（`tests/fixtures/slack/`）で単体テスト: 緩い形式の解釈 / 名簿外の人名 / 機微語 / 重複再貼り付け / 40字超の引用
 2. JSON Schema と検証（不一致で書かない）
 3. 抽出スキル（匿名化済みのみ読む）を架空サンプルで磨く。評価観点は emh-006（抽出観点の定義）
-4. candidates 連携（04）
+4. candidates 連携（04）: 実装済み `scripts/slack_to_candidates.py` / スキル `skills/slack-to-candidates`（emh-032）。前処理・匿名化・抽出スキル本体（1〜3）は未実装で、構造化 JSON は §6 の形で用意されている前提
 
 ## 11. 未決事項
 - Slack 貼り付けの保持期間（Q-016）
