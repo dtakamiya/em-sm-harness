@@ -51,7 +51,7 @@ L2 の付与は種別だけでなく **`scope`（テンプレ ID + 固定宛先�
  "audience":"team","content_sha256":"sha256:...","content_chars":120,"source_refs":["inbox-0003"],
  "policy_sha256":"sha256:...","decision":"L1_only","reason":"no_grant"}
 ```
-- `event`: `drafted | em_reviewed | em_sent | discarded | stale | denied | executed`（`executed` は L2 まで出ない）。ローカルのタスク更新は別系統で `task_updated | task_reverted`（[24](24-reply-apply.md)。`action=task.update`・`actor`・`op`・`target_id`・`changes`（変更ファイルごとの前後 `sha256`。同一 `batch_id` 内ではバッチ全体の反映前後の値）・`new_task_id`、本文なし）
+- `event`: `drafted | em_reviewed | em_sent | discarded | stale | denied | executed`（`executed` は L2 まで出ない）。ローカルのタスク更新は別系統で `task_updated | task_reverted`。承認キューの本文なし記録 `queue_rendered | queue_item`（書式は [26 §2](26-trial-review-metrics.md)。**未実装**）。タスク更新の詳細は [24](24-reply-apply.md): `action=task.update`・`actor`・`op`・`target_id`・`changes`（変更ファイルごとの前後 `sha256`。同一 `batch_id` 内ではバッチ全体の反映前後の値）・`new_task_id`、本文なし）
 - `result`（`em_reviewed` 以降）: `adopted_as_is | edited | rejected`。EM が実際に送った文面のハッシュを照合に使う
 - 記録しない: 本文・Slack/Jira の文面・人への評価や所感・実名（ID か匿名ラベル）
 - `policy_sha256`: 判定に使った policy の内容ハッシュ。付与状態を `config/local.*` に置く場合は、repo の雛形と local の結合結果のハッシュとする
