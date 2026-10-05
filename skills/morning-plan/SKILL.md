@@ -12,6 +12,7 @@ description: EM の朝の「今日の計画」を 60 秒で読める 1 枚にす
 2. 出力を 14 の A〜E で自己点検する（合否は内部判定のみ。出力に載せない）
 3. 催促候補があれば、トーン別に最大 2 案の**下書き**を `data/outputs/YYYY-MM-DD-nudge.md` に作る（未送信と明記）。送信は EM
 4. EM に計画をそのまま返す。足す前置き・経緯説明は不要
+5. EM の返答（採用/却下/後で・完了・先送り）は定型語に直し、実行前に見せてから `python3 scripts/apply_reply.py "<定型語1>" "<定型語2>"` で `data/tasks` に反映する（`--dry-run` で確認、`--undo` で直前を戻す。書式は `docs/design/24-reply-apply.md`）。結果の1行をそのまま EM に返す
 
 ## してはいけないこと
 - Slack / Jira / Confluence への書き込み・送信、トークン使用（L1 の範囲外）

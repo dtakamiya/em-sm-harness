@@ -10,7 +10,7 @@ Slack の依頼・Jira のアサイン・Confluence のアクションアイテ�
 ## 委任ラダー上の位置づけ
 - 個人タスクは EM 自身のデータ。**`data/tasks/` への書き込みは秘書が直接やってよい**（L1 の範囲内。外部ツールへの書き込みではないため）
 - 他者・Jira / Confluence / Slack への波及（催促の送信、Jira ステータス更新など）は**下書きまで**。実行は EM
-- 全操作を `data/audit/` に1行追記（誰が・何を・いつ。タスク本文は入れず `id` と操作名のみ）
+- 全操作を `data/audit/` に1行追記（誰が=`actor`・何を=`op`/`target_id`/対象ファイル・いつ=`ts`。タスク本文は入れず id・操作名・前後ハッシュのみ。形式は [05](05-approval-and-audit.md)・[24](24-reply-apply.md)）
 
 ## タスクの出所
 Slack 貼り付けの「依頼」（EM 宛て）/ Jira の EM アサイン・レビュー待ち / Confluence 議事録のアクションアイテム（担当が EM）/ 手動追加 / 秘書が先回りで起こすもの（会議前準備・催促）。
@@ -21,6 +21,8 @@ data/tasks/
   tasks.json        # 現役タスク（open/doing/waiting）
   archive/YYYY-MM.json  # done/dropped を月次で移送（直近の参照用に30日は tasks.json に残す）
   candidates.json   # 取り込みで見つかった「タスク候補」。EM が確定するまでここ
+  rejected.json     # 却下した候補の出典（記録のみ。再提案の抑止は取り込み実装時に参照する）
+  *.bak / .last-reply.json  # 返答反映の直前状態と取り消し用の記録（24 参照）
 ```
 更新は「一時ファイルに書いて rename」で原子的に行う（途中で壊れて全タスクを失わない）。更新前の `tasks.json` は `tasks.json.bak` に1世代残す。
 
@@ -70,7 +72,7 @@ EM は自然言語で依頼 → 秘書が下記の操作に解釈して実行し
 | 操作 | 入力 | 動作 | 結果の返し方 |
 |---|---|---|---|
 | add | title（+due/priority/source_ref） | 新規 `open`。重複候補があれば先に提示 | `+ t-0012 …（期限 10/9・soon）` |
-| done | id または title の曖昧一致 | `done`。一致が複数なら候補を番号付きで返して確認 | `✓ t-0007 完了` |
+| done | id（完全一致）。title から探すときは秘書が候補を番号付きで提示し、EM が id を選ぶ | `done` | `✓ t-0007 完了` |
 | defer | id, 新 due | `due` 変更。理由は任意。**3回目の defer** で「drop か分割か」を問う | `→ t-0003 期限 10/9→10/16（2回目）` |
 | delegate | id, waiting_on, next_check | `waiting` へ。next_check 省略時は既定（仮: 3営業日後） | `⏳ t-0005 member-a 待ち（10/8 に確認）` |
 | snooze | id, until | 今日の計画・棚卸しから一時的に外す（`snooze_until`）。status は変えない | `💤 t-0009 10/14 まで非表示` |
@@ -79,6 +81,8 @@ EM は自然言語で依頼 → 秘書が下記の操作に解釈して実行し
 
 - `snooze_until` は任意フィールド（スキーマに追加可）。期日到来で自動的に表示対象へ戻る
 - 一括操作（「今日のを全部 done」等）は件数と一覧を見せて確認してから実行
+
+返答（採用/却下/後で・完了・先送り）を反映する定型語の書式と取り消しは [24](24-reply-apply.md)（emh-035）。
 
 ## 取り込みとタスク候補
 1. 取り込み（Slack 構造化データの「依頼」・Jira の EM アサイン・Confluence アクション）から **候補**を `candidates.json` に作る。`tasks.json` へは直接入れない
