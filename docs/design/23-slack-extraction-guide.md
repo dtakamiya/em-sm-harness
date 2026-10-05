@@ -70,6 +70,7 @@ python3 scripts/eval_slack_extraction.py <構造化 JSON またはディレク�
 ```
 - 突き合わせの鍵は `(kind, evidence.msg_index, actors.from)`。文言（`observation` / `quote`）の揺れは数えない
 - 出力: 再現率（期待のうち拾えた割合）・誤抽出（期待にない item の件数。うち `excluded` の発言から出たもの）・精度・`confidence` / `to_em` の食い違い件数
-- 終了コード: 0=OK / 1=`--min-recall` または `--max-extra` の基準割れ / 2=入力不正
+- 終了コード: 0=OK / 1=`--min-recall` または `--max-extra` の基準割れ（期待 item が 0 件で再現率が算出できないときに `--min-recall` を指定した場合も 1）/ 2=入力不正（オプション値の範囲外 `--min-recall` 0〜1・`--max-extra` 0 以上、鍵または source の重複を含む）
+- `--expected` の既定はスクリプト基準のパスで、実行ディレクトリに依存しない
 - 同梱の `skills/slack-to-candidates/examples/` は再現率 100%・誤抽出 0 が基準（回帰の確認）
-- 限界: 期待値は架空サンプル 2 件・計 6 item。判定の鍵が粗いので、品質の最終判断は §6 のチェックと EM のレビューで行う
+- 限界: 同じ発言から同種別・同発言者の item が複数出る場合は鍵が衝突するため、重複は中止（終了コード 2）として扱い、件数合わせはしない。期待値は架空サンプル 2 件・計 6 item。判定の鍵が粗いので、品質の最終判断は §6 のチェックと EM のレビューで行う

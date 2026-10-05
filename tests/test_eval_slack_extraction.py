@@ -1,5 +1,7 @@
 import contextlib
 import io
+import os
+import subprocess
 import json
 import sys
 import tempfile
@@ -118,6 +120,38 @@ class EvalSlackExtractionTest(unittest.TestCase):
         self.write("2.json", data)
         with self.assertRaises(ev.EvalError):
             ev.load_actuals([self.dir])
+
+    def test_duplicate_keys_in_actual_or_expected_are_rejected(self):
+        with self.assertRaises(ev.EvalError):
+            run_eval([item()], [item(), item()])
+        with self.assertRaises(ev.EvalError):
+            run_eval([item(), item()], [item()])
+        dup = self.write("dup.json", {"source": {"file": "2026-10-05-ex-team-01.md"},
+                                      "items": [item(), item()]})
+        code, _, err = self.cli(dup)
+        self.assertEqual(code, 2)
+        self.assertIn("重複", err)
+
+    def test_duplicate_expected_sources_are_rejected(self):
+        exp = {"files": [{"source": SOURCE, "items": []}, {"source": SOURCE, "items": []}]}
+        with self.assertRaises(ev.EvalError):
+            ev.evaluate(exp, {})
+
+    def test_invalid_thresholds_exit_two(self):
+        for flag, value in (("--min-recall", "1.5"), ("--min-recall", "-0.1"), ("--max-extra", "-1")):
+            code, _, err = self.cli(EXAMPLES, flag, value)
+            self.assertEqual(code, 2, (flag, value))
+            self.assertIn(flag, err)
+
+    def test_min_recall_with_no_expected_items_exits_one(self):
+        empty = self.write("empty.json", {"files": []})
+        self.assertEqual(self.cli(EXAMPLES, "--expected", empty, "--min-recall", "0.5")[0], 1)
+
+    def test_runs_from_another_directory_with_default_expected(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "eval_slack_extraction.py"), str(EXAMPLES)],
+                              cwd=self.dir, capture_output=True, text=True, env={**os.environ})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("再現率 100%", proc.stdout)
 
     def test_default_expected_path_exists(self):
         self.assertTrue(EXPECTED_PATH.exists())

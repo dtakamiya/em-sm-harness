@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-DEFAULT_EXPECTED = Path("tests/fixtures/slack-extraction/expected.json")
+DEFAULT_EXPECTED = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "slack-extraction" / "expected.json"
 CHECKED_FIELDS = ("confidence", "to_em")  # 鍵が一致した item で値の食い違いを数える項目
 
 
@@ -34,6 +34,17 @@ def _key(item):
         raise EvalError(f"item {item.get('id', '?') if isinstance(item, dict) else '?'} に kind / evidence.msg_index / actors.from がありません")
 
 
+def _index(items, label):
+    """鍵で引ける dict にする。同一鍵の重複は黙って潰さず中止する。"""
+    indexed = {}
+    for i in items:
+        k = _key(i)
+        if k in indexed:
+            raise EvalError(f"{label}に同じ鍵 (kind, msg_index, from) の item が重複しています: {k[0]}@{k[1]}({k[2]})")
+        indexed[k] = i
+    return indexed
+
+
 def load_actuals(paths):
     """構造化データ（13 §6）を source.file ごとに集める。ディレクトリは *.json を読む。"""
     files = []
@@ -54,8 +65,8 @@ def load_actuals(paths):
 
 def evaluate_file(expected_file, actual_items):
     """1 貼り付け分の比較結果。入力は変更しない。"""
-    expected = {_key(i): i for i in expected_file["items"]}
-    actual = {_key(i): i for i in actual_items}
+    expected = _index(expected_file["items"], f"期待値 {expected_file['source']} に")
+    actual = _index(actual_items, f"抽出結果 {expected_file['source']} に")
     matched = expected.keys() & actual.keys()
     excluded_idx = {e["msg_index"] for e in expected_file.get("excluded", [])}
     extra = [k for k in actual if k not in expected]
@@ -78,6 +89,9 @@ def evaluate(expected, actuals):
         items = actuals.get(ef["source"])
         result = evaluate_file(ef, items or [])
         results.append({**result, "found": items is not None})
+    sources = [ef["source"] for ef in expected["files"]]
+    if len(sources) != len(set(sources)):
+        raise EvalError("期待値に同じ source のファイルが重複しています")
     unevaluated = sorted(set(actuals) - {ef["source"] for ef in expected["files"]})
     return results, unevaluated
 
@@ -128,6 +142,12 @@ def main(argv=None):
     ap.add_argument("--min-recall", type=float, default=None, help="下回ったら終了コード 1")
     ap.add_argument("--max-extra", type=int, default=None, help="誤抽出がこの件数を超えたら終了コード 1")
     args = ap.parse_args(argv)
+    if args.min_recall is not None and not 0 <= args.min_recall <= 1:
+        print("評価を中止しました: --min-recall は 0〜1 で指定してください", file=sys.stderr)
+        return 2
+    if args.max_extra is not None and args.max_extra < 0:
+        print("評価を中止しました: --max-extra は 0 以上で指定してください", file=sys.stderr)
+        return 2
     try:
         expected = _read_json(args.expected, "期待値")
         results, unevaluated = evaluate(expected, load_actuals(args.actual))
