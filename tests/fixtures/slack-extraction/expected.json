@@ -6,7 +6,7 @@
       "items": [
         {"id": "s-01", "kind": "request", "to_em": true,
          "actors": {"from": "m_b2b2b2", "to": ["em"]},
-         "observation": "金曜までに担当を決めたい、と em に確認を求めている",
+         "observation": "金曜までに決めたい、と em に確認を求めている",
          "evidence": {"msg_index": 2, "quote": "金曜までに決めたいです"},
          "due_raw": "金曜まで", "answered_in_thread": false,
          "confidence": "high", "interpretation_candidates": []},

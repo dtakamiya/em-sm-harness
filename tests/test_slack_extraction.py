@@ -73,12 +73,16 @@ class SlackExtractionTest(unittest.TestCase):
                 self.assertIsNone(EVALUATIVE.search(t), t)
 
     def test_to_em_request_requires_explicit_em_and_low_confidence_is_absent(self):
-        for _, _, item in self.each_item():
+        for _, msgs, item in self.each_item():
             self.assertNotEqual(item["confidence"], "low", item["id"])
             if item["kind"] == "request" and item["to_em"]:
                 self.assertEqual(item["actors"]["to"], ["em"])
-                self.assertIn("em", anonymized_messages(
-                    next(f["source"] for f, _, i in self.each_item() if i is item))[item["evidence"]["msg_index"] - 1])
+                self.assertRegex(msgs[item["evidence"]["msg_index"] - 1], r"\bem\b")
+
+    def test_signal_and_risk_are_medium(self):
+        for _, _, item in self.each_item():
+            if item["kind"] in {"signal", "risk"}:
+                self.assertEqual(item["confidence"], "medium", item["id"])
 
     def test_each_paste_covers_planted_kinds_and_excluded_have_reasons(self):
         kinds = {f["source"]: {i["kind"] for i in f["items"]} for f in EXPECTED["files"]}

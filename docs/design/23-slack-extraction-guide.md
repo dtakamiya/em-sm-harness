@@ -28,6 +28,8 @@
 | `medium` | 宛先や対象は読めるが、依頼か雑談かが文脈依存 | candidates に流す（EM が確定） |
 | `low` | 文脈からの推定 | 流さない・`notes` に残すのみ |
 
+`signal` / `risk` は解釈を含むため原則 `medium`（明示的な本人の言明でも `high` にしない）。
+
 ## 4. 誤読リスクと対策
 | 誤読 | 対策 |
 |---|---|
@@ -38,7 +40,7 @@
 | 担当・期限の補完 | 原文にないものは空欄 + `notes`。`due_raw` を日付に直すのは candidates 作成時（曖昧なら null） |
 
 ## 5. 抽出例（架空サンプル）
-入力: `tests/fixtures/sample-week/slack/` の 2 件。期待出力: `tests/fixtures/slack-extraction/expected.json`（匿名化後ハンドル `m_a1a1a1` 等は例示用の架空値）。検証は `tests/test_slack_extraction.py`。
+入力: `tests/fixtures/sample-week/slack/` の 2 件。期待出力: `tests/fixtures/slack-extraction/expected.json`（匿名化後ハンドル `m_a1a1a1` 等は例示用の架空値）。検証は `tests/test_slack_extraction.py`。`excluded` は fixture 専用の注記で、本番のスキーマ（13 §6）には出力しない。
 
 | 貼り付け | 発言 | 結果 | 理由 |
 |---|---|---|---|
@@ -49,13 +51,13 @@
 | 10/07 | member-c「また夜中までかかりました。明日の午前は動けるか分かりません」 | `signal`（fatigue）。「明日の午前は〜」は別 item にしない | 解釈候補 2 つ + 確かめ方。後半は発言者本人の見込みで、リスク断定の材料にしない |
 | 10/07 | member-a「リスクが残っている気がします。em さん、相談できますか」 | `risk` + `request`（`to_em: true`・medium） | 懸念の発言そのもの + EM への相談依頼。期限語なし → `due_raw: null` |
 
-## 6. 品質チェック（抽出スキルの出力に対して）
+## 6. 品質チェック（抽出スキルの出力に対して・受入基準）
 - [ ] 全 item に `quote`（40 字以内・原文の部分文字列）がある
 - [ ] `actors` はハンドルのみ（実名・メンション表記が残っていない）
-- [ ] `signal` に `interpretation_candidates` が 2 件以上ある。`signal` 以外では `risk` のみ最大 2 件
+- [ ] `interpretation_candidates` は `signal` ちょうど 2 件、`risk` は 0〜2 件、他の種別は空（13 §6 と同じ）
 - [ ] `observation` に評価語・因果語・補完（担当・期限・理由の推測）がない
 - [ ] `low` を candidates に流していない
 
 ## 7. 未決事項
-- `signal` の抽出既定は Q-017（EM 判断）。本書は既定「抽出する」で書いてある
+- `signal` の抽出既定は Q-017 で回答済み: a（既定で抽出・個人別集計なし）2026-10-04。本書はそれに従う
 - 実際の Slack コピー形式が 13 §4 と違う場合の見本確認は Q-013 と同様
