@@ -1,0 +1,62 @@
+{
+  "handles": {"member-a": "m_a1a1a1", "member-b": "m_b2b2b2", "member-c": "m_c3c3c3", "em": "em"},
+  "files": [
+    {
+      "source": "2026-10-05-ex-team-01.md",
+      "items": [
+        {"id": "s-01", "kind": "request", "to_em": true,
+         "actors": {"from": "m_b2b2b2", "to": ["em"]},
+         "observation": "金曜までに担当を決めたい、と em に確認を求めている",
+         "evidence": {"msg_index": 2, "quote": "金曜までに決めたいです"},
+         "due_raw": "金曜まで", "answered_in_thread": false,
+         "confidence": "high", "interpretation_candidates": []},
+        {"id": "s-02", "kind": "blocker",
+         "actors": {"from": "m_c3c3c3", "to": []},
+         "observation": "EX-101 が staging のデータ待ちで止まっている、と述べている",
+         "evidence": {"msg_index": 3, "quote": "staging のデータ待ちで止まっています"},
+         "blocked_what_raw": "EX-101", "jira_keys": ["EX-101"],
+         "confidence": "high", "interpretation_candidates": []}
+      ],
+      "excluded": [
+        {"msg_index": 1, "reason": "宛先が読めない質問。依頼として抽出しない"}
+      ]
+    },
+    {
+      "source": "2026-10-07-ex-team-02.md",
+      "items": [
+        {"id": "s-01", "kind": "decision",
+         "actors": {"from": "m_b2b2b2", "to": []},
+         "observation": "EX-102 を次スプリントに回すと述べている。承認者として m_a1a1a1 が挙がっている",
+         "evidence": {"msg_index": 1, "quote": "EX-102 は次スプリントに回します"},
+         "decided_by": ["m_a1a1a1"], "scope_raw": "EX-102 の次スプリント送り",
+         "jira_keys": ["EX-102"], "confidence": "high", "interpretation_candidates": []},
+        {"id": "s-02", "kind": "signal", "signal_type": "fatigue",
+         "actors": {"from": "m_c3c3c3", "to": []},
+         "observation": "「また夜中までかかりました」と発言している",
+         "evidence": {"msg_index": 2, "quote": "また夜中までかかりました"},
+         "confidence": "medium",
+         "interpretation_candidates": [
+           "直近の作業負荷が高い状態が続いている可能性",
+           "今回の作業だけが長引いた可能性"],
+         "check_hint": "1on1 などで直近の負荷を本人に聞いて確かめる"},
+        {"id": "s-03", "kind": "risk",
+         "actors": {"from": "m_a1a1a1", "to": []},
+         "observation": "来週のリリース判断にリスクが残っている気がする、と述べている",
+         "evidence": {"msg_index": 3, "quote": "リスクが残っている気がします"},
+         "confidence": "medium",
+         "interpretation_candidates": [
+           "未解消の懸念が実際に残っている可能性",
+           "確認不足による不安で、事実としての問題はまだ無い可能性"]},
+        {"id": "s-04", "kind": "request", "to_em": true,
+         "actors": {"from": "m_a1a1a1", "to": ["em"]},
+         "observation": "リリース判断について em に相談できるか尋ねている",
+         "evidence": {"msg_index": 3, "quote": "em さん、相談できますか"},
+         "due_raw": null, "answered_in_thread": false,
+         "confidence": "medium", "interpretation_candidates": []}
+      ],
+      "excluded": [
+        {"msg_index": 2, "reason": "「明日の午前は動けるか分かりません」は本人の見込み。別 item にせずリスク断定の材料にしない"}
+      ]
+    }
+  ]
+}
