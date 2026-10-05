@@ -19,6 +19,15 @@ def _ops_on(task, today, ops):
     return [h for h in task.get("history", []) if h.get("op") in ops and _day(h.get("at")) == today]
 
 
+def _touched_today(task, today):
+    """apply_reply は wait/delegate を履歴に書かないため、updated が今日の返信待ちも拾う。"""
+    return bool(_ops_on(task, today, WAIT_OPS)) or _day(task.get("updated")) == today
+
+
+def _check_text(task):
+    return f"確認予定 {_md(_day(task['next_check']))}" if task.get("next_check") else "確認予定未設定"
+
+
 def build_wrapup(tasks, today):
     tomorrow = today + timedelta(days=1)
     live = [t for t in tasks if _visible(t, today)]
@@ -30,7 +39,9 @@ def build_wrapup(tasks, today):
         "done": [t for t in tasks if _ops_on(t, today, ("done",))],
         "carry": [t for t in active if _day(t.get("due")) and _day(t["due"]) <= today and t["id"] not in deferred_ids],
         "deferred": deferred_today,
-        "new_waiting": [t for t in live if t["status"] == "waiting" and _ops_on(t, today, WAIT_OPS)],
+        "new_waiting": [t for t in live if t["status"] == "waiting" and _touched_today(t, today)],
+        "nudge_due": [t for t in live if t["status"] == "waiting" and _day(t.get("next_check"))
+                      and _day(t["next_check"]) <= today and not _touched_today(t, today)],
         "seeds_due": [t for t in active if _day(t.get("due")) == tomorrow],
         "seeds_check": [t for t in live if t["status"] == "waiting" and _day(t.get("next_check")) == tomorrow],
         "defer_asks": [t for t in active
@@ -57,8 +68,8 @@ def render(w):
     today = w["today"]
     if w["carry"]:
         status, head = "🔴 要対応", f"期限が今日以前の未完了が {len(w['carry'])} 件残っています"
-    elif w["new_waiting"] or w["deferred"] or w["defer_asks"]:
-        status, head = "🟡 注意", "持ち越し・新しい返信待ちあり"
+    elif w["new_waiting"] or w["nudge_due"] or w["deferred"] or w["defer_asks"]:
+        status, head = "🟡 注意", "先送り・返信待ち・判断依頼あり"
     else:
         status, head = "🟢 順調", "持ち越しなし"
     todo = []
@@ -66,15 +77,19 @@ def render(w):
         todo.append("期限が今日以前の未完了の扱い（今日やる / 先送り / drop）を決める")
     if w["defer_asks"]:
         todo.append("先送りが続くタスクの扱いを決める")
+    if w["nudge_due"]:
+        todo.append("確認予定を過ぎた返信待ちを見る（催促の下書きは朝の計画）")
     if w["new_waiting"]:
-        todo.append("新しい返信待ちの確認予定日を見る")
+        todo.append("今日動いた返信待ちの確認予定日を見る")
     out = [f"# 夕方の締め {today.isoformat()}", "", f"{status}: {head}", "",
            f"**EM がやること**: {'、'.join(todo) if todo else '対応不要'}",
            "", f"今日の完了: {len(w['done'])} 件"]
     out += _section("持ち越し（観察）", w["carry"], lambda t: _carry_line(t, today))
     out += _section("今日先送りした", w["deferred"], lambda t: f"{t['id']} {t['title']}")
-    out += _section("新たな返信待ち", w["new_waiting"],
-                    lambda t: f"{t['id']} {t['waiting_on']} 待ち（確認予定 {_md(_day(t['next_check']))}）")
+    out += _section("今日動いた返信待ち（新規を含む）", w["new_waiting"],
+                    lambda t: f"{t['id']} {t['waiting_on']} 待ち（{_check_text(t)}）")
+    out += _section("確認予定を過ぎた返信待ち", w["nudge_due"],
+                    lambda t: f"{t['id']} {t['waiting_on']} 待ち（{_check_text(t)}）")
     seeds = w["seeds_due"] + w["seeds_check"]
     out += _section("明日の計画の種", seeds,
                     lambda t: f"{t['id']} {t['title']}（" + ("期限" if t in w["seeds_due"] else "返信確認") + "が明日）")
@@ -85,7 +100,7 @@ def render(w):
     out += ["", "## 詳細",
             "- 読み取り専用。tasks.json は変更しません（反映は返答→定型語→apply_reply。docs/design/24）",
             "- 持ち越し = 状態が open/doing で期限が今日以前、かつ今日先送りしていないもの。理由は推測しません",
-            "- 「今日の完了・先送り・待ちになった」は各タスクの history の今日付けの操作から数えます"]
+            "- 今日の完了・先送りは history の今日付けの操作、返信待ちは wait/delegate の操作か updated が今日かで数えます"]
     return "\n".join(out) + "\n"
 
 
