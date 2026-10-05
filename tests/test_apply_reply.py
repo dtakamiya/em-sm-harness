@@ -119,7 +119,7 @@ class ApplyReplyTest(unittest.TestCase):
         self.run_replies("採用 c-0001", "完了 t-0001")
         rows = self.audit_rows()
         self.assertEqual([r["op"] for r in rows], ["adopt", "done"])
-        self.assertTrue(all(r["before_sha256"] != r["after_sha256"] for r in rows))
+        self.assertTrue(all(c["before_sha256"] != c["after_sha256"] for r in rows for c in r["changes"]))
         raw = (self.data / "audit" / "2026-10-05.jsonl").read_text(encoding="utf-8")
         self.assertNotIn("架空", raw)
         self.assertEqual({r["action"] for r in rows}, {"task.update"})
@@ -210,6 +210,41 @@ class ApplyReplyTest(unittest.TestCase):
                 ar.main(["--data-dir", str(self.data), *argv])
             self.assertEqual(cm.exception.code, 2)
         self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "open")
+
+    def test_audit_points_at_real_changes_and_new_task_id(self):
+        self.run_replies("採用 c-0001", "却下 c-0002", "後で c-0003", "完了 t-0001")
+        adopt, reject, later, done = self.audit_rows()
+        self.assertEqual([c["file"] for c in adopt["changes"]], ["tasks.json", "candidates.json"])
+        self.assertEqual(adopt["new_task_id"], "t-0004")
+        self.assertEqual([c["file"] for c in reject["changes"]], ["candidates.json", "rejected.json"])
+        self.assertEqual([c["file"] for c in later["changes"]], ["candidates.json"])
+        self.assertEqual([c["file"] for c in done["changes"]], ["tasks.json"])
+        self.assertNotIn("new_task_id", done)
+
+    def test_cli_rejects_undo_with_dry_run_and_does_not_undo(self):
+        self.run_replies("完了 t-0001")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
+            ar.main(["--data-dir", str(self.data), "--undo", "--dry-run"])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "done")
+
+    def test_reject_output_says_record_only(self):
+        self.assertIn("再提案の抑止は未実装", self.run_replies("却下 c-0002")[0])
+
+    def test_invalid_schema_is_reported_not_traceback(self):
+        bad = ('[]', '{}', '{"tasks": {}}', '{"tasks": [1]}', '{"tasks": [{"title": "idなし"}]}')
+        for text in bad:
+            with self.subTest(text=text):
+                (self.data / "tasks" / "tasks.json").write_text(text)
+                with self.assertRaises(ar.ReplyError):
+                    self.run_replies("完了 t-0001")
+                self.assertEqual((self.data / "tasks" / "tasks.json").read_text(), text)
+
+    def test_invalid_manifest_is_reported(self):
+        self.run_replies("完了 t-0001")
+        (self.data / "tasks" / ar.UNDO_MANIFEST).write_text("[]")
+        with self.assertRaises(ar.ReplyError):
+            ar.undo(self.data, now=NOW)
 
 
 if __name__ == "__main__":
