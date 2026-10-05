@@ -1,7 +1,11 @@
+import contextlib
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -146,6 +150,66 @@ class ApplyReplyTest(unittest.TestCase):
         new_state, _ = ar.apply_one(state, "done", "t-0001", [], TODAY, self.data / "none")
         self.assertEqual(tasks[0]["status"], "open")
         self.assertEqual(new_state["tasks"][0]["status"], "done")
+
+    def test_later_accepts_explicit_date(self):
+        out = self.run_replies("後で c-0003 2026-10-20")
+        self.assertIn("10/20", out[0])
+        self.assertEqual([c for c in self.read("candidates.json", "candidates") if c["id"] == "c-0003"][0]["snooze_until"], "2026-10-20")
+
+    def test_crash_midway_then_undo_restores_original(self):
+        orig = {n: (self.data / "tasks" / n).read_bytes() for n in ("tasks.json", "candidates.json")}
+        real = ar._atomic_write_bytes
+        calls = []
+
+        def flaky(path, content):
+            if path.name in ar.TRACKED:  # .bak 退避は通し、本体の2つ目で落とす
+                calls.append(path.name)
+                if len(calls) == 2:
+                    raise OSError("disk full")
+            return real(path, content)
+
+        with mock.patch.object(ar, "_atomic_write_bytes", flaky), self.assertRaises(OSError):
+            self.run_replies("採用 c-0001", "却下 c-0002")
+        ar.undo(self.data, now=NOW)
+        for n, content in orig.items():
+            self.assertEqual((self.data / "tasks" / n).read_bytes(), content)
+        self.assertFalse((self.data / "tasks" / "rejected.json").exists())
+
+    def test_undo_refuses_without_touching_when_bak_missing(self):
+        self.run_replies("完了 t-0001")
+        (self.data / "tasks" / "tasks.json.bak").unlink()
+        snapshot = (self.data / "tasks" / "tasks.json").read_bytes()
+        with self.assertRaises(ar.ReplyError):
+            ar.undo(self.data, force=True, now=NOW)
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), snapshot)
+        self.assertTrue((self.data / "tasks" / ar.UNDO_MANIFEST).exists())
+
+    def test_undo_refuses_when_bak_does_not_match_pre_apply_hash(self):
+        self.run_replies("完了 t-0001")
+        (self.data / "tasks" / "tasks.json.bak").write_text("{}")
+        with self.assertRaises(ar.ReplyError):
+            ar.undo(self.data, now=NOW)
+
+    def test_stale_bak_from_failed_apply_cannot_fake_undo(self):
+        self.run_replies("完了 t-0001")
+        (self.data / "tasks" / ar.UNDO_MANIFEST).unlink()
+        with self.assertRaises(ar.ReplyError):
+            ar.undo(self.data, now=NOW)
+
+    def test_unwritable_audit_blocks_update_before_any_write(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        (self.data / "audit").write_text("file, not dir")
+        with self.assertRaises(ar.ReplyError):
+            self.run_replies("完了 t-0001")
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+        self.assertFalse((self.data / "tasks" / "tasks.json.bak").exists())
+
+    def test_cli_rejects_undo_with_replies_and_force_alone(self):
+        for argv in (["--undo", "完了 t-0001"], ["--force", "完了 t-0001"]):
+            with self.subTest(argv=argv), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
+                ar.main(["--data-dir", str(self.data), *argv])
+            self.assertEqual(cm.exception.code, 2)
+        self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "open")
 
 
 if __name__ == "__main__":

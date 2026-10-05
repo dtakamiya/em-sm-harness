@@ -128,13 +128,37 @@ def apply_one(state, op, target, extra, today, archive_dir):
     return {**state, "tasks": [new if t["id"] == target else t for t in tasks]}, line
 
 
-def _audit(audit_dir, now, batch_id, op, target, before, after):
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    row = {"ts": now.isoformat(timespec="seconds"), "event": "task_updated", "action": "task.update",
-           "level_applied": "L0", "batch_id": batch_id, "op": op, "target_id": target,
-           "before_sha256": before, "after_sha256": after}
+ACTOR = "secretary"
+CAND_OPS = ("adopt", "reject", "later")
+
+
+def _audit_rows(now, batch_id, parsed, before, after):
+    base = {"ts": now.isoformat(timespec="seconds"), "event": "task_updated", "action": "task.update",
+            "actor": ACTOR, "level_applied": "L0", "batch_id": batch_id}
+    rows = []
+    for op, target, _ in parsed:
+        file = "candidates.json" if op in CAND_OPS else "tasks.json"
+        rows.append({**base, "op": op, "target_id": target, "file": file,
+                     "before_sha256": before[file], "after_sha256": after[file]})
+    return rows
+
+
+def _append_audit(audit_dir, now, rows):
     with (audit_dir / f"{now.date().isoformat()}.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        fh.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+
+
+def _ensure_audit_writable(audit_dir, now):
+    """監査を書けないなら、タスクを書く前に止める（監査なしの更新を作らない）。"""
+    try:
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        (audit_dir / f"{now.date().isoformat()}.jsonl").open("a", encoding="utf-8").close()
+    except OSError as exc:
+        raise ReplyError(f"監査ログに書けません（{exc.strerror}）。監査なしでは更新しません")
+
+
+def _bytes_sha(content):
+    return "sha256:" + hashlib.sha256(content).hexdigest()
 
 
 def apply_replies(data_dir, lines, today, now=None, dry_run=False):
@@ -152,20 +176,37 @@ def apply_replies(data_dir, lines, today, now=None, dry_run=False):
         results.append(line)
     if dry_run:
         return results
+    _ensure_audit_writable(audit_dir, now)
     tasks_dir.mkdir(parents=True, exist_ok=True)
     batch_id = now.strftime("r-%Y%m%dT%H%M%S")
+    payload = {n: (json.dumps({"version": 1, k: state[k]}, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+               for n, k in (("tasks.json", "tasks"), ("candidates.json", "candidates"), ("rejected.json", "rejected"))}
     before = {n: _sha(tasks_dir / n) for n in TRACKED}
+    after = {n: _bytes_sha(payload[n]) for n in TRACKED}
     existed = [n for n in TRACKED if (tasks_dir / n).exists()]
     for n in existed:
-        (tasks_dir / (n + ".bak")).write_bytes((tasks_dir / n).read_bytes())
-    for name, key in (("tasks.json", "tasks"), ("candidates.json", "candidates"), ("rejected.json", "rejected")):
-        _atomic_write(tasks_dir / name, {"version": 1, key: state[key]})
-    after = {n: _sha(tasks_dir / n) for n in TRACKED}
-    _atomic_write(tasks_dir / UNDO_MANIFEST, {"batch_id": batch_id, "existed": existed, "after": after})
-    for op, target, _ in parsed:
-        file = "candidates.json" if op in ("adopt", "reject", "later") else "tasks.json"
-        _audit(audit_dir, now, batch_id, op, target, before[file], after[file])
+        _atomic_write_bytes(tasks_dir / (n + ".bak"), (tasks_dir / n).read_bytes())
+    # 先にマニフェストを書く: 途中で落ちても --undo が .bak と反映前ハッシュで検証できる
+    _atomic_write(tasks_dir / UNDO_MANIFEST,
+                  {"batch_id": batch_id, "existed": existed, "before": before, "after": after})
+    for n in TRACKED:
+        _atomic_write_bytes(tasks_dir / n, payload[n])
+    _append_audit(audit_dir, now, _audit_rows(now, batch_id, parsed, before, after))
     return results
+
+
+def _check_undo_preconditions(tasks_dir, manifest, force):
+    """何も触る前に全部確認する。1つでも合わなければ拒否。"""
+    for n in manifest["existed"]:
+        bak = tasks_dir / (n + ".bak")
+        if not bak.exists():
+            raise ReplyError(f"{bak.name} がありません。戻せないため何も触りません")
+        if _sha(bak) != manifest["before"][n]:
+            raise ReplyError(f"{bak.name} の内容が反映前と一致しません。戻せないため何も触りません")
+    # 途中で落ちた反映は「反映前」と「反映後」が混在してよい。どちらでもなければ手編集
+    changed = [n for n in TRACKED if _sha(tasks_dir / n) not in (manifest["before"][n], manifest["after"][n])]
+    if changed and not force:
+        raise ReplyError(f"反映後に {', '.join(changed)} が手編集されています。戻すと編集が消えます（--force で実行）")
 
 
 def undo(data_dir, force=False, now=None):
@@ -174,20 +215,17 @@ def undo(data_dir, force=False, now=None):
     manifest = _read(tasks_dir / UNDO_MANIFEST, None)
     if manifest is None:
         raise ReplyError("戻せる直前の返答反映がありません")
-    changed = [n for n in TRACKED if _sha(tasks_dir / n) != manifest["after"][n]]
-    if changed and not force:
-        raise ReplyError(f"反映後に {', '.join(changed)} が手編集されています。戻すと編集が消えます（--force で実行）")
+    _check_undo_preconditions(tasks_dir, manifest, force)
+    _ensure_audit_writable(audit_dir, now)
     for n in TRACKED:
         if n in manifest["existed"]:
             _atomic_write_bytes(tasks_dir / n, (tasks_dir / (n + ".bak")).read_bytes())
         else:
             (tasks_dir / n).unlink(missing_ok=True)
     (tasks_dir / UNDO_MANIFEST).unlink()
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    row = {"ts": now.isoformat(timespec="seconds"), "event": "task_reverted", "action": "task.update",
-           "level_applied": "L0", "batch_id": manifest["batch_id"]}
-    with (audit_dir / f"{now.date().isoformat()}.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    _append_audit(audit_dir, now, [{"ts": now.isoformat(timespec="seconds"), "event": "task_reverted",
+                                    "action": "task.update", "actor": ACTOR, "level_applied": "L0",
+                                    "batch_id": manifest["batch_id"]}])
     return f"↩ {manifest['batch_id']} を取り消しました"
 
 
@@ -207,6 +245,10 @@ def main(argv=None):
     ap.add_argument("--force", action="store_true", help="--undo で手編集を上書きして戻す")
     args = ap.parse_args(argv)
     data_dir = Path(args.data_dir)
+    if args.undo and args.replies:
+        ap.error("--undo と返答は同時に指定できません")
+    if args.force and not args.undo:
+        ap.error("--force は --undo と一緒に指定してください")
     try:
         if args.undo:
             print(undo(data_dir, args.force))
@@ -214,8 +256,11 @@ def main(argv=None):
             for line in apply_replies(data_dir, args.replies, _day(args.today, "--today"), dry_run=args.dry_run):
                 print(line)
     except ReplyError as exc:
-        print(f"拒否: {exc}（何も書き込んでいません）", file=sys.stderr)
+        print(f"拒否: {exc}（事前チェックで止めたため、tasks は変更していません）", file=sys.stderr)
         sys.exit(1)
+    except OSError as exc:
+        print(f"失敗: 書込中にエラー（{exc}）。--undo で直前の状態へ戻せるか確認してください", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
