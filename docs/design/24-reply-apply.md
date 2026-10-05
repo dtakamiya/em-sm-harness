@@ -21,10 +21,10 @@
 - 全件を検証してから書く。1件でも不正（id 不一致、閉じたタスク、日付の誤り）なら tasks は変更しない
 - id は完全一致のみ。タイトルから探す場合は秘書が候補を提示し、EM が id を選ぶ
 - `--undo` と返答の同時指定、`--undo` と `--dry-run` の同時指定（取り消しは確認なしで実行されるため）、`--force` 単独はエラー
-- 形式が不正な JSON（配列でない・キー欠落）は、上書きせずエラーメッセージで止まる
+- 形式が不正な JSONのうち、トップレベルの形式（オブジェクトで、対象キーが配列）と各要素の `id` 欠落（`rejected` を除く）だけを検査し、不正なら上書きせずエラーメッセージで止まる。それ以外のフィールド欠落・型不正は検査しない
 
 ## 記録と取り消し
-- 監査: `data/audit/YYYY-MM-DD.jsonl` に操作ごと1行。`event=task_updated`、`actor=secretary`、`op`、`target_id`、`changes`（実際に変わったファイルごとの前後 `sha256`。採用は tasks.json と candidates.json、却下は candidates.json と rejected.json）、採用時は `new_task_id`。取り消しは `event=task_reverted`。**タスク本文は入れない**（[05](05-approval-and-audit.md) §3）
+- 監査: `data/audit/YYYY-MM-DD.jsonl` に操作ごと1行。`event=task_updated`、`actor=secretary`、`op`、`target_id`、`changes`（実際に変わったファイルごとの前後 `sha256`。採用は tasks.json と candidates.json、却下は candidates.json と rejected.json）、採用時は `new_task_id`。**同一 `batch_id` 内の前後ハッシュは、その操作単体ではなくバッチ全体（1回の呼び出し）の反映前後の値**（同じファイルを複数操作が変えれば、各行に同じ値が入る）。取り消しは `event=task_reverted`。**タスク本文は入れない**（[05](05-approval-and-audit.md) §3）
 - 監査ログに書けない場合は、書込前の確認で止める。ただし確認後〜追記までの間に失敗する窓は残る（その場合は tasks が更新済みで監査行が欠けるため、エラー終了（終了コード 2）し、`--undo` で戻す）
 - 取り消し用: 反映前の `tasks.json` / `candidates.json` / `rejected.json` を `.bak` に退避し、`.last-reply.json` に**反映前・反映後のハッシュ**を持つ。`.bak` を先に、マニフェストを次に、本体を最後に書く
 - `--undo` は何も触る前に全 `.bak` の存在と反映前ハッシュを照合し、1つでも合わなければ何もせず拒否する（失敗した反映の古い `.bak` で「戻した」と偽らない）。手編集（反映前でも後でもない内容）も拒否（`--force` で上書き）。戻せるのは直前の1回のみ
