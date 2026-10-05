@@ -57,6 +57,7 @@ def build_plan(tasks, candidates, today):
         (t for t in live if t["status"] == "waiting" and _day(t["next_check"]) <= today),
         key=lambda t: t["next_check"],
     )
+    visible_cands = [c for c in candidates if _visible(c, today)]
     defer_asks = [t for t in active if sum(h["op"] == "defer" for h in t.get("history", [])) >= DEFER_ASK_COUNT - 1]
     return {
         "today": today,
@@ -65,8 +66,8 @@ def build_plan(tasks, candidates, today):
         "overdue": overdue,
         "nudges": nudges,
         "defer_asks": defer_asks,
-        "candidates": candidates[:MAX_CANDIDATES],
-        "candidate_overflow": max(0, len(candidates) - MAX_CANDIDATES),
+        "candidates": visible_cands[:MAX_CANDIDATES],
+        "candidate_overflow": max(0, len(visible_cands) - MAX_CANDIDATES),
     }
 
 
