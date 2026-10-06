@@ -1,0 +1,73 @@
+{
+  "handles": {"member-a": "m_a1a1a1", "member-b": "m_b2b2b2", "member-c": "m_c3c3c3", "em": "em"},
+  "files": [
+    {
+      "source": "2026-10-05-ex-planning.md",
+      "items": [
+        {"id": "m-01", "kind": "decision", "decided_by": ["m_a1a1a1"], "jira_keys": ["EX-102"],
+         "observation": "EX-102 を次スプリントに回す、とメモにある。承認者として m_a1a1a1 が挙がっている",
+         "evidence": {"line": 2, "quote": "EX-102 は次スプリントに回す"}, "confidence": "high"},
+        {"id": "m-02", "kind": "action_item", "owner": "m_b2b2b2", "to_em": false, "due_raw": "2026-10-09",
+         "observation": "m_b2b2b2 がデモ環境の手順書を更新する、とメモにある",
+         "evidence": {"line": 4, "quote": "デモ環境の手順書を 2026-10-09 までに更新"}, "confidence": "high"},
+        {"id": "m-03", "kind": "action_item", "owner": "em", "to_em": true, "due_raw": "来週水曜まで",
+         "observation": "em が見積もりの前提を m_a1a1a1 に共有する、とメモにある",
+         "evidence": {"line": 5, "quote": "見積もりの前提を m_a1a1a1 に共有"}, "confidence": "high"},
+        {"id": "m-04", "kind": "open_question", "asked_of": ["m_a1a1a1"], "needs_em": false,
+         "observation": "デモ環境の担当が決まっておらず、m_a1a1a1 に確認中、とメモにある",
+         "evidence": {"line": 7, "quote": "デモ環境の担当は未定"}, "confidence": "high"}
+      ],
+      "excluded": [],
+      "candidates": [
+        {"source_ref": "2026-10-05-ex-planning.md:m-03", "suggested_due": null}
+      ]
+    },
+    {
+      "source": "2026-10-07-ex-sync.md",
+      "items": [
+        {"id": "m-01", "kind": "open_question", "asked_of": [], "needs_em": false,
+         "observation": "リリース判断の前にリスク確認が必要、とメモにある。担当は書かれていない",
+         "evidence": {"line": 1, "quote": "リスク確認が必要"}, "confidence": "medium"},
+        {"id": "m-02", "kind": "action_item", "owner": null, "to_em": false, "due_raw": null,
+         "observation": "ログの保存期間を確認する、とメモにある。担当は読み取れない",
+         "evidence": {"line": 2, "quote": "誰かがログの保存期間を確認する"}, "confidence": "low"},
+        {"id": "m-03", "kind": "action_item", "owner": "m_c3c3c3", "to_em": false, "due_raw": null,
+         "observation": "m_c3c3c3 がデータ移行の見積もりを出す、とメモにある",
+         "evidence": {"line": 4, "quote": "がデータ移行の見積もりを出す"}, "confidence": "high"},
+        {"id": "m-04", "kind": "action_item", "owner": "em", "to_em": true, "due_raw": "2026-10-12",
+         "observation": "em が m_c3c3c3 の見積もりをレビューする、とメモにある",
+         "evidence": {"line": 4, "quote": "em がレビュー（2026-10-12 まで）"}, "confidence": "high"}
+      ],
+      "excluded": [
+        {"line": 3, "reason": "「かも」で確定していない。担当の確約として扱わない"},
+        {"line": 5, "reason": "次回の日程であり、決定・依頼・未決のいずれでもない"}
+      ],
+      "candidates": [
+        {"source_ref": "2026-10-07-ex-sync.md:m-04", "suggested_due": "2026-10-12"}
+      ]
+    },
+    {
+      "source": "2026-10-08-ex-review.md",
+      "items": [
+        {"id": "m-01", "kind": "decision", "decided_by": [], "jira_keys": ["EX-103"],
+         "observation": "来週のデモに EX-103 を含めない、とメモにある。承認者は読み取れない",
+         "evidence": {"line": 1, "quote": "来週のデモは EX-103 を含めない"}, "confidence": "medium"},
+        {"id": "m-02", "kind": "open_question", "asked_of": ["m_a1a1a1"], "needs_em": false,
+         "observation": "m_a1a1a1 が承認するかの確認が必要、とメモにある",
+         "evidence": {"line": 2, "quote": "が承認するか確認が必要"}, "confidence": "high"},
+        {"id": "m-03", "kind": "action_item", "owner": "em", "to_em": true, "due_raw": null,
+         "observation": "em が顧客向け説明の要否を判断する、とメモにある。期限は書かれていない",
+         "evidence": {"line": 3, "quote": "顧客向け説明の要否を判断する"}, "confidence": "high"},
+        {"id": "m-04", "kind": "action_item", "owner": "m_b2b2b2", "to_em": false, "due_raw": null,
+         "observation": "m_b2b2b2 がレビュー依頼を出す、とメモにある",
+         "evidence": {"line": 4, "quote": "レビュー依頼を出す"}, "confidence": "high"}
+      ],
+      "excluded": [
+        {"line": 5, "reason": "会議の日程であり、決定・依頼・未決のいずれでもない"}
+      ],
+      "candidates": [
+        {"source_ref": "2026-10-08-ex-review.md:m-03", "suggested_due": null}
+      ]
+    }
+  ]
+}

@@ -46,7 +46,7 @@ data/tasks/
 | `status` | `open`/`doing`/`waiting`/`done`/`dropped` | 遷移は下表 |
 | `priority` | `now`/`soon`/`later` | 判定基準は emh-016。未設定は `soon` |
 | `due` | `YYYY-MM-DD` / null | 外部期限。EM 自身の目標日は `notes` に書く（期限超過の誤検知を避ける） |
-| `source` | `slack`/`jira`/`confluence`/`manual`/`secretary` | |
+| `source` | `slack`/`jira`/`confluence`/`meeting`/`manual`/`secretary` | |
 | `source_ref` | 文字列 / null | Jira キー・貼り付けファイル名・ページ ID など**参照のみ**。Slack 本文・Jira summary は写さない |
 | `waiting_on` | 文字列 / null | **匿名化済みハンドル**（例 `member-a`）。実名は入れない。`waiting` のとき必須 |
 | `next_check` | 日付 / null | `waiting` のとき必須。到来で催促下書きの対象 |
