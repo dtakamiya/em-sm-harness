@@ -1,0 +1,10 @@
+{"version": 1, "tasks": [
+ {"id": "t-0201", "title": "設計レビューの観点をまとめる", "status": "done", "priority": "soon", "due": "2026-10-07", "blocks": [], "history": [{"at": "2026-10-01", "op": "add"}, {"at": "2026-10-07", "op": "done"}]},
+ {"id": "t-0202", "title": "週次報告の下書きを作る", "status": "open", "priority": "soon", "due": "2026-10-06", "blocks": [], "history": [{"at": "2026-09-29", "op": "add"}]},
+ {"id": "t-0203", "title": "ふりかえりの進行案を決める", "status": "open", "priority": "soon", "due": "2026-10-12", "blocks": [], "history": [{"at": "2026-09-30", "op": "add"}, {"at": "2026-10-06", "op": "defer"}, {"at": "2026-10-08", "op": "defer"}]},
+ {"id": "t-0204", "title": "仕様の確認結果を受け取る", "status": "waiting", "priority": "soon", "due": null, "waiting_on": "member-a", "next_check": "2026-10-09", "blocks": [], "history": [{"at": "2026-10-05", "op": "add"}, {"at": "2026-10-07", "op": "delegate"}]},
+ {"id": "t-0205", "title": "依頼元へ状況を返す", "status": "waiting", "priority": "soon", "due": null, "waiting_on": "member-b", "next_check": "2026-10-08", "blocks": [], "history": [{"at": "2026-10-02", "op": "add"}, {"at": "2026-10-03", "op": "wait"}]},
+ {"id": "t-0206", "title": "見積もりの回答を受け取る", "status": "waiting", "priority": "soon", "due": null, "waiting_on": "member-c", "blocks": [], "updated": "2026-10-06", "history": [{"at": "2026-10-06", "op": "add"}]},
+ {"id": "t-0207", "title": "レトロの議題を集める", "status": "open", "priority": "soon", "due": "2026-10-14", "blocks": [], "history": [{"at": "2026-10-08", "op": "add"}]},
+ {"id": "t-0208", "title": "前週に完了したタスク", "status": "done", "priority": "soon", "due": null, "blocks": [], "history": [{"at": "2026-09-28", "op": "add"}, {"at": "2026-10-02", "op": "done"}]}
+]}
