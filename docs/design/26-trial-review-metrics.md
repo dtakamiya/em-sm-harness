@@ -4,7 +4,7 @@
 
 ## 結論
 - Q-022 / Q-025 / Q-027 / Q-029 が言う「試用 2 週間後に件数を見て調整」を、**何をどこから数えるか** 1 枚にした。EM が指標のためだけに記録することはない（試用開始日を 1 回伝える点だけ例外。§1）
-- **試用開始時点で数えられるのは M6 と、M7 の推定版だけ**。実在する監査イベントは `task_updated` / `task_reverted` のみ（`scripts/apply_reply.py`）。M2〜M4 が使う `em_reviewed`・`queue_*`、M1 が使う `--ack`/`--snooze` と `data/state/proactive.json` は**設計だけで未実装**（承認キューも先回り検知 `proactive_scan.py` も未着手）
+- **試用開始時点で数えられるのは M6 と、M7 の推定版だけ**。実在する監査イベントは `task_updated` / `task_reverted` のみ（`scripts/apply_reply.py`）。M2〜M4 が使う `em_reviewed`・`queue_*`、M1 が使う `--ack`/`--snooze` と `data/state/proactive.json` は**承認キューは未実装**（先回り検知 `proactive_scan.py` と `--ack`/`--snooze`・`data/state/proactive.json` は emh-036 でモック実装済み）
 - M1・M5 は **Jira 実接続（[09](09-go-checklist.md)）後**に加え、M1 は**検知スクリプト未実装**も条件。それまでは「未計測」と書き、0 件とは書かない
 - **EM の判断が要る指標は外した**。Q-027 の「追加として数えた件のうち EM が『計画内だった』と判断した割合」は、EM が 1 件ずつ答えない限り数えられない。Q-025 の「EM が `⟦EM が決める⟧` を追記した割合」も同様に直接は数えられず、`edited`（下書きと送った文面が違った）で**代用**する（M2）。いずれも代用であって同じ意味ではない
 - 数字は **調整の材料であって原因の説明ではない**（共起と因果を区別する）。しきい値を自動で変えない。変えるかは EM が決める

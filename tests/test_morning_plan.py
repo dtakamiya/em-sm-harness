@@ -90,3 +90,42 @@ class MorningPlanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MorningPlanProactiveTest(unittest.TestCase):
+    def test_proactive_section_is_added_only_when_requested(self):
+        import contextlib
+        import io
+        import tempfile
+        argv = ["--tasks", str(SAMPLES / "tasks.sample.json"), "--candidates", str(SAMPLES / "candidates.sample.json"),
+                "--today", "2026-10-04"]
+        with tempfile.TemporaryDirectory() as tmp:
+            extra = ["--proactive", "--jira-dir", f"{tmp}/jira", "--meetings", f"{tmp}/none.json", "--state", f"{tmp}/s.json"]
+            outs = []
+            for flags in ([], extra):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    mp.main(argv + flags)
+                outs.append(buf.getvalue())
+        self.assertNotIn("## 先回り", outs[0])
+        self.assertIn("## 先回り（観察）", outs[1])
+        self.assertLess(outs[1].index("## 先回り"), outs[1].index("## 詳細"))
+
+    def test_waiting_task_with_two_nudges_is_decision_only_not_draft_target(self):
+        import contextlib
+        import io
+        import json
+        import tempfile
+        t = {"id": "t-1", "title": "x", "status": "waiting", "waiting_on": "member-a", "next_check": "2026-10-04",
+             "due": None, "blocks": [], "updated": "2026-10-04",
+             "history": [{"at": "2026-10-01", "op": "nudge"}, {"at": "2026-10-02", "op": "nudge"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks = f"{tmp}/t.json"
+            Path(tasks).write_text(json.dumps({"tasks": [t]}), encoding="utf-8")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                mp.main(["--tasks", tasks, "--candidates", f"{tmp}/c.json", "--today", "2026-10-04", "--proactive",
+                         "--jira-dir", f"{tmp}/j", "--meetings", f"{tmp}/m.json", "--state", f"{tmp}/s.json"])
+        out = buf.getvalue()
+        self.assertNotIn("返信待ちの催促候補", out)
+        self.assertIn("判断依頼", out)

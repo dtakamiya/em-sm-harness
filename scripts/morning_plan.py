@@ -84,7 +84,7 @@ def _line(task, today):
     return f"{task['id']} {task['title']}{tail}"
 
 
-def render(plan):
+def render(plan, proactive_lines=()):
     today = plan["today"]
     if plan["overdue"]:
         status, head = "🔴 要対応", f"期限超過 {len(plan['overdue'])} 件"
@@ -116,6 +116,8 @@ def render(plan):
         out += [f"- {c['id']} {c['title']}（出典 {c['source_ref']}）" for c in plan["candidates"]]
         if plan["candidate_overflow"]:
             out.append(f"- ほか {plan['candidate_overflow']} 件")
+    if proactive_lines:
+        out += ["", *proactive_lines]
     out += ["", "## 詳細", "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）",
             "- 並べ順は暫定: 期限超過 → 今日 → 3日以内 → 優先度 now/soon/later → 他を止めている数 → 期限順"]
     return "\n".join(out) + "\n"
@@ -126,9 +128,25 @@ def main(argv=None):
     ap.add_argument("--tasks", default="data/tasks/tasks.json")
     ap.add_argument("--candidates", default="data/tasks/candidates.json")
     ap.add_argument("--today", default=date.today().isoformat())
+    ap.add_argument("--proactive", action="store_true", help="先回り節を載せる（状態ファイルを更新する）")
+    ap.add_argument("--jira-dir", default="data/jira-cache")
+    ap.add_argument("--meetings", default="data/meetings/meetings.json")
+    ap.add_argument("--state", default="data/state/proactive.json")
     args = ap.parse_args(argv)
-    plan = build_plan(_load(args.tasks, "tasks"), _load(args.candidates, "candidates"), _day(args.today))
-    sys.stdout.write(render(plan))
+    today = _day(args.today)
+    plan = build_plan(_load(args.tasks, "tasks"), _load(args.candidates, "candidates"), today)
+    lines = ()
+    if args.proactive:
+        import proactive_scan as ps
+        try:
+            shown, overflow, decisions, notes = ps.collect((args.tasks, args.jira_dir, args.meetings, args.state), today)
+        except ps.BrokenInput as exc:
+            raise SystemExit(f"先回り入力エラー: {exc}。状態は変更していません")
+        lines = ps.render_section(shown, overflow, decisions, today, notes)
+        # 判断依頼に回った返信待ちは、催促の下書き対象から外す（17 §2: 3 回目は下書きを出さない）
+        asked = {f["ref"] for f in shown if f["key"] in decisions and f["rule"] == "waiting"}
+        plan = {**plan, "nudges": [t for t in plan["nudges"] if t["id"] not in asked]}
+    sys.stdout.write(render(plan, lines))
 
 
 if __name__ == "__main__":
