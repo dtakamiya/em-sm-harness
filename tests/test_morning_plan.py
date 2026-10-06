@@ -147,7 +147,7 @@ class MorningPlanProactiveTest(unittest.TestCase):
             Path(f"{tmp}/t.json").write_text(json.dumps({"tasks": [t]}), encoding="utf-8")
             Path(f"{tmp}/c.json").write_text("[]", encoding="utf-8")  # 候補ファイルが不正 → collect の後で失敗
             state = f"{tmp}/s.json"
-            Path(state).write_text(json.dumps({"due:t-1": {"level": "中", "shown_count": 2, "last_shown": "2026-10-03",
+            Path(state).write_text(json.dumps({"due:t-1": {"level": "中", "shown_count": 2, "last_shown": "2026-09-29",
                                                           "first_seen": "2026-10-01", "snooze_until": None}}))
             before = Path(state).read_text()
             argv = ["--tasks", f"{tmp}/t.json", "--candidates", f"{tmp}/c.json", "--today", "2026-10-04", "--proactive",
