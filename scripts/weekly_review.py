@@ -16,6 +16,35 @@ WAIT_OPS = ("wait", "delegate")
 DEFER_REPEAT = 2  # 週内に先送りが 2 回以上＝事実として並べる（判断依頼は朝・夕の仕事）
 
 
+def _parse_day(value, where):
+    """ISO 日付（YYYY-MM-DD）に変換する。不正なら場所を示して終了する。"""
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise SystemExit(f"{where} の日付が不正です（{value!r}。YYYY-MM-DD で指定）。上書きはしません")
+
+
+def validate_tasks(tasks):
+    """tasks の形式を先に検査する。due / next_check / snooze_until は任意（null 可）、書かれていれば日付として検査。"""
+    for i, t in enumerate(tasks):
+        if not isinstance(t, dict):
+            raise SystemExit(f"tasks[{i}] の形式が不正です（オブジェクトではありません）。上書きはしません")
+        tid = t.get("id", f"tasks[{i}]")
+        for key in ("id", "title", "status") + (("waiting_on",) if t.get("status") == "waiting" else ()):
+            if not t.get(key):
+                raise SystemExit(f"{tid} に必須キー {key} がありません。上書きはしません")
+        for key in ("due", "next_check", "snooze_until"):
+            if t.get(key) is not None:
+                _parse_day(t[key], f"{tid} の {key}")
+        history = t.get("history", [])
+        if not isinstance(history, list):
+            raise SystemExit(f"{tid} の history 形式が不正です（配列ではありません）。上書きはしません")
+        for j, h in enumerate(history):
+            if not isinstance(h, dict) or not h.get("op"):
+                raise SystemExit(f"{tid} の history[{j}] 形式が不正です（op がありません）。上書きはしません")
+            _parse_day(h.get("at"), f"{tid} の history[{j}].at")
+
+
 def week_start(today):
     return today - timedelta(days=today.weekday())
 
@@ -24,13 +53,14 @@ def _ops_in(task, start, today, ops):
     return [h for h in task.get("history", []) if h.get("op") in ops and start <= _day(h.get("at")) <= today]
 
 
-def _wait_since(task):
-    """返信待ちにした日。wait/delegate の最後の操作日。無ければ None（推測しない）。"""
-    days = [_day(h["at"]) for h in task.get("history", []) if h.get("op") in WAIT_OPS]
+def _wait_since(task, today):
+    """返信待ちにした日。today 以下の wait/delegate の最後の操作日。無ければ None（推測しない）。"""
+    days = [d for d in (_day(h["at"]) for h in task.get("history", []) if h.get("op") in WAIT_OPS) if d <= today]
     return max(days) if days else None
 
 
 def build_review(tasks, today):
+    validate_tasks(tasks)
     start = week_start(today)
     live = [t for t in tasks if _visible(t, today)]
     active = [t for t in live if t["status"] in ACTIVE]
@@ -66,7 +96,7 @@ def _overdue_line(t, today):
 
 
 def _wait_line(t, today):
-    since = _wait_since(t)
+    since = _wait_since(t, today)
     age = f"返信待ちにして {(today - since).days} 日" if since else "返信待ちにした日は記録なし"
     check = f"確認予定 {_md(_day(t['next_check']))}" if t.get("next_check") else "確認予定未設定"
     return f"{t['id']} {t['waiting_on']} 待ち（{age}・{check}）"
@@ -98,7 +128,7 @@ def render(w):
     out += _section("返信待ちの滞留", w["waiting"], lambda t: _wait_line(t, today))
     out += ["", "## 詳細",
             "- 読み取り専用。tasks.json は変更しません（反映は返答→定型語→apply_reply。docs/design/24）",
-            f"- 週 = 月曜（{_md(w['start'])}）から今日まで。完了・追加・先送りは history の日付で数えます",
+            f"- 週 = 月曜（{_md(w['start'])}）から今日まで。完了・追加・先送りは history の日付で数えます（snooze 中のタスクも数えます。一覧には出しません）",
             "- 持ち越し = 状態が open/doing で、週の前に追加されたもの。理由は推測しません",
             "- 前週との比較はしません（週ごとの保存先が未設計。docs/design/29）。解釈は載せません"]
     return "\n".join(out) + "\n"
@@ -109,7 +139,8 @@ def main(argv=None):
     ap.add_argument("--tasks", default="data/tasks/tasks.json")
     ap.add_argument("--today", default=date.today().isoformat())
     args = ap.parse_args(argv)
-    sys.stdout.write(render(build_review(_load(args.tasks, "tasks"), _day(args.today))))
+    today = _parse_day(args.today, "--today")
+    sys.stdout.write(render(build_review(_load(args.tasks, "tasks"), today)))
 
 
 if __name__ == "__main__":

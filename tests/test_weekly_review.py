@@ -88,6 +88,55 @@ class WeeklyReviewTest(unittest.TestCase):
     def test_missing_file_gives_empty_review(self):
         self.assertEqual(wr._load(str(ROOT / "nope.json"), "tasks"), [])
 
+    def _build_with(self, **overrides):
+        base = {"id": "t-0300", "title": "x", "status": "open", "history": [{"at": "2026-10-06", "op": "add"}]}
+        return wr.build_review([{**base, **overrides}], TODAY)
+
+    def test_history_with_missing_or_null_or_bad_at_exits_with_message(self):
+        for bad in ({"op": "add"}, {"at": None, "op": "add"}, {"at": "10/06", "op": "add"}):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit) as cm:
+                self._build_with(history=[bad])
+            self.assertIn("history[0].at", str(cm.exception))
+
+    def test_history_not_a_list_or_entry_without_op_exits(self):
+        for bad in ("oops", [{"at": "2026-10-06"}], ["x"]):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit) as cm:
+                self._build_with(history=bad)
+            self.assertIn("history", str(cm.exception))
+
+    def test_missing_required_keys_exit_with_task_id(self):
+        for key in ("id", "title"):
+            with self.subTest(key=key), self.assertRaises(SystemExit) as cm:
+                self._build_with(**{key: ""})
+            self.assertIn(key, str(cm.exception))
+        with self.assertRaises(SystemExit) as cm:
+            self._build_with(status="waiting")
+        self.assertIn("t-0300 に必須キー waiting_on", str(cm.exception))
+
+    def test_invalid_optional_dates_exit_but_null_is_allowed(self):
+        for key in ("due", "next_check", "snooze_until"):
+            with self.subTest(key=key), self.assertRaises(SystemExit) as cm:
+                self._build_with(**{key: "tomorrow"})
+            self.assertIn(key, str(cm.exception))
+        self._build_with(due=None, next_check=None, snooze_until=None)
+
+    def test_invalid_today_argument_exits_with_message(self):
+        with self.assertRaises(SystemExit) as cm:
+            wr.main(["--today", "2026-13-40", "--tasks", str(SAMPLE / "tasks.sample.json")])
+        self.assertIn("--today", str(cm.exception))
+
+    def test_future_wait_op_is_not_used_for_age(self):
+        w = self._build_with(status="waiting", waiting_on="member-a",
+                             history=[{"at": "2026-10-20", "op": "wait"}])
+        out = wr.render(w)
+        self.assertIn("返信待ちにした日は記録なし", out)
+        self.assertNotIn("返信待ちにして -", out)
+
+    def test_snoozed_task_still_counts_in_week_totals(self):
+        w = self._build_with(snooze_until="2026-10-20")
+        self.assertEqual([t["id"] for t in w["added"]], ["t-0300"])
+        self.assertEqual(w["active"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
