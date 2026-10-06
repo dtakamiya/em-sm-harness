@@ -137,6 +137,29 @@ class MorningPlanProactiveTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 mp.main(argv)
 
+    def test_failure_after_collect_leaves_state_unchanged(self):
+        import contextlib
+        import io
+        import json
+        import tempfile
+        t = {"id": "t-1", "title": "x", "status": "open", "due": "2026-10-05", "updated": "2026-10-01", "history": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(f"{tmp}/t.json").write_text(json.dumps({"tasks": [t]}), encoding="utf-8")
+            Path(f"{tmp}/c.json").write_text("[]", encoding="utf-8")  # 候補ファイルが不正 → collect の後で失敗
+            state = f"{tmp}/s.json"
+            Path(state).write_text(json.dumps({"due:t-1": {"level": "中", "shown_count": 2, "last_shown": "2026-10-03",
+                                                          "first_seen": "2026-10-01", "snooze_until": None}}))
+            before = Path(state).read_text()
+            argv = ["--tasks", f"{tmp}/t.json", "--candidates", f"{tmp}/c.json", "--today", "2026-10-04", "--proactive",
+                    "--jira-dir", f"{tmp}/j", "--meetings", f"{tmp}/m.json", "--state", state]
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+                mp.main(argv)
+            self.assertEqual(Path(state).read_text(), before)
+            Path(f"{tmp}/c.json").write_text('{"candidates": []}', encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                mp.main(argv)
+            self.assertEqual(json.loads(Path(state).read_text())["due:t-1"]["shown_count"], 3)
+
     def test_malformed_inputs_stop_with_message_instead_of_traceback(self):
         for text in ("[]", '{"tasks": [{"id": "t-1", "title": "x"}]}',
                      '{"tasks": [{"id": "t-1", "title": "x", "status": "open", "updated": null}]}',

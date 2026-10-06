@@ -270,6 +270,10 @@ class MalformedInputTest(unittest.TestCase):
             "tasks missing status": dict(tasks={"tasks": [{"id": "t-1", "title": "x", "updated": "2026-10-01"}]}),
             "tasks updated null": dict(tasks={"tasks": [{**self.T_OK, "updated": None}]}),
             "tasks bad due": dict(tasks={"tasks": [{**self.T_OK, "due": "soon"}]}),
+            "tasks no title": dict(tasks={"tasks": [{k: v for k, v in self.T_OK.items() if k != "title"}]}),
+            "waiting without waiting_on": dict(tasks={"tasks": [{**self.T_OK, "status": "waiting", "next_check": "2026-10-06"}]}),
+            "jira link issue_key not str": dict(tasks={"tasks": []}, jira={**ok_jira, "issues": [{**self.ISSUE_OK,
+                "links": [{"link_type": "blocks", "direction": "outward", "issue_key": 5}]}]}),
             "tasks entry not object": dict(tasks={"tasks": ["x"]}),
             "jira top-level list": dict(tasks={"tasks": []}, jira=[]),
             "jira no fetched_at": dict(tasks={"tasks": []}, jira={"issues": [self.ISSUE_OK]}),
@@ -281,6 +285,17 @@ class MalformedInputTest(unittest.TestCase):
         for name, kw in cases.items():
             with self.subTest(name):
                 self.assertEqual(self._exit_code(**kw), ps.EXIT_BROKEN)
+
+    def test_state_with_non_dict_value_exits_2_and_is_not_overwritten(self):
+        for text in ('{"due:t-1": 3}', '[]'):
+            with self.subTest(text=text):
+                ws = Workspace(self, [task("t-1", due="2026-10-09")])
+                ws.state_p.parent.mkdir(parents=True)
+                ws.state_p.write_text(text)
+                code = quiet_main(["--tasks", str(ws.tasks_p), "--jira-dir", str(ws.jira_d), "--meetings", str(ws.meet_p),
+                                   "--state", str(ws.state_p), "--audit-dir", str(ws.dir / "a"), "--today", "2026-10-07"])
+                self.assertEqual(code, ps.EXIT_BROKEN)
+                self.assertEqual(ws.state_p.read_text(), text)
 
     def test_snooze_with_bad_date_exits_2_and_keeps_state(self):
         ws = Workspace(self, [task("t-1", due="2026-10-09")])

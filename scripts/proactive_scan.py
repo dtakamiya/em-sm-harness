@@ -294,8 +294,11 @@ def validate_tasks(tasks, where):
     for i, t in enumerate(_need_list(tasks, where)):
         at = f"{where}[{i}]"
         _need_dict(t, at)
-        if not isinstance(t.get("id"), str) or t.get("status") not in TASK_STATUSES:
-            raise BrokenInput(f"{at} の id/status が不正です")
+        if not isinstance(t.get("id"), str) or not isinstance(t.get("title"), str) \
+                or t.get("status") not in TASK_STATUSES:
+            raise BrokenInput(f"{at} の id/title/status が不正です")
+        if t["status"] == "waiting" and not isinstance(t.get("waiting_on"), str):
+            raise BrokenInput(f"{at} は waiting ですが waiting_on がありません")
         _need_date(t.get("due"), at, required=False)
         _need_date(t.get("next_check"), at, required=False)
         _need_date(t.get("updated"), at)
@@ -313,7 +316,8 @@ def validate_issues(issues, where):
             raise BrokenInput(f"{at} の key/status_category が不正です")
         _need_date(it.get("updated"), at)
         for lk in _need_list(it.get("links", []), at):
-            if not isinstance(lk, dict) or not {"link_type", "direction", "issue_key"} <= set(lk):
+            if not isinstance(lk, dict) or not {"link_type", "direction", "issue_key"} <= set(lk) \
+                    or not isinstance(lk["issue_key"], str):
                 raise BrokenInput(f"{at} の links が不正です")
     return issues
 
@@ -351,9 +355,11 @@ def load_inputs(tasks_path, jira_dir, meetings_path):
 def load_state(path):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}  # 壊れていたら全 key を新規扱い（通知が増える側に倒す）
+        return {}  # 読めなければ全 key を新規扱い（通知が増える側に倒す）
+    if not isinstance(data, dict) or not all(isinstance(v, dict) for v in data.values()):
+        raise BrokenInput(f"{path} の形式が不正です")  # 読めるが形が違う: 推測で上書きしない
+    return data
 
 
 def save_state(path, state):
@@ -415,8 +421,8 @@ def render(shown, overflow, decisions, today, notes=()):
     return "\n".join([f"# 先回り {today.isoformat()}", "", head, "", f"**EM がやること**: {todo}", ""] + body + detail) + "\n"
 
 
-def collect(args_paths, today, digest=False, persist=True):
-    """スキャン〜絞り込み〜状態更新まで。戻り値: (shown, overflow, decisions, notes)。破損は BrokenInput。"""
+def collect_with_state(args_paths, today, digest=False):
+    """スキャン〜絞り込みまで（保存はしない）。戻り値: (shown, overflow, decisions, notes, new_state)。破損は BrokenInput。"""
     tasks_p, jira_d, meet_p, state_p = args_paths
     tasks, issues, fetched, meetings = load_inputs(tasks_p, jira_d, meet_p)
     notes = []
@@ -432,10 +438,15 @@ def collect(args_paths, today, digest=False, persist=True):
     findings = scan(tasks, issues, meetings, today)
     state = load_state(state_p)
     shown, overflow, decisions = select(findings, tasks, state, today, digest)
-    if persist:
-        new = prune_state(update_state(state, shown, decisions, today), {f["key"] for f in findings}, today)
-        save_state(state_p, new)
-    return shown, overflow, decisions, notes
+    new_state = prune_state(update_state(state, shown, decisions, today), {f["key"] for f in findings}, today)
+    return shown, overflow, decisions, notes, new_state
+
+
+def collect(args_paths, today, digest=False):
+    """collect_with_state して状態を保存する。戻り値: (shown, overflow, decisions, notes)。"""
+    *result, new_state = collect_with_state(args_paths, today, digest)
+    save_state(args_paths[3], new_state)
+    return tuple(result)
 
 
 def build_parser():

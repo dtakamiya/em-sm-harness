@@ -142,11 +142,11 @@ def main(argv=None):
         today = _day(args.today)
     except ValueError:
         raise SystemExit("--today の日付が不正です")
-    lines, detail = (), ()
+    lines, detail, new_state = (), (), None
     if args.proactive:
         import proactive_scan as ps
         try:
-            shown, overflow, decisions, notes = ps.collect((args.tasks, args.jira_dir, args.meetings, args.state), today)
+            shown, overflow, decisions, notes, new_state = ps.collect_with_state((args.tasks, args.jira_dir, args.meetings, args.state), today)
         except ps.BrokenInput as exc:
             raise SystemExit(f"先回り入力エラー: {exc}。状態は変更していません")
         lines, detail = ps.render_section(shown, overflow, decisions, today), ps.detail_lines(notes)
@@ -158,7 +158,10 @@ def main(argv=None):
         # 判断依頼に回った返信待ちは、催促の下書き対象から外す（17 §2: 3 回目は下書きを出さない）
         asked = {f["ref"] for f in shown if f["key"] in decisions and f["rule"] == "waiting"}
         plan = {**plan, "nudges": [t for t in plan["nudges"] if t["id"] not in asked]}
-    sys.stdout.write(render(plan, lines, detail))
+    output = render(plan, lines, detail)
+    if args.proactive:
+        ps.save_state(args.state, new_state)  # 出力が組み立てられた後にだけ保存する
+    sys.stdout.write(output)
 
 
 if __name__ == "__main__":
