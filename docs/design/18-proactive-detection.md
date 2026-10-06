@@ -39,10 +39,11 @@
 - 起動: `python3 scripts/proactive_scan.py [--today 日付] [--digest] [--ack K] [--snooze K 日付]`
 - 出力: 標準出力の Markdown（結論 → EM がやること → 先回り → 判断依頼 → 詳細）。[14](14-output-quality-checklist.md) の A（60 秒）・B（事実と解釈）を満たす
 - 終了コード: 0 = 通知なし / 10 = 通知あり / 2 = 入力ファイル破損（状態を変えず中止）
-- 状態: `data/state/proactive.json` = `{key: {first_seen, last_shown, shown_count, level, snooze_until}}`。key と回数だけ（本文・実名は入れない）。一時ファイル → rename、`.bak` を 1 世代。90 日で、解消済みの key を削除。状態が壊れたら全 key を新規扱いにして出し直す（通知が増える側に倒す）
+- 状態: `data/state/proactive.json` = `{key: {first_seen, last_shown, shown_count, level, snooze_until, acked_level?, decision_on?}}`（`acked_level` = `--ack` した段。同じ段の間は非表示 / `decision_on` = 判断依頼にした日。以後は繰り返さない）。key と回数だけ（本文・実名は入れない）。一時ファイル → rename、`.bak` を 1 世代。90 日で、解消済みの key を削除。状態が壊れたら全 key を新規扱いにして出し直す（通知が増える側に倒す）
 - 冪等: 同じ入力・日付・状態なら出力は同一。同日の再実行は表示済みを再表示し、回数を増やさない
 - 欠損: 入力ファイルが無いルールは「入力なし」を詳細に 1 行出して他は続行（沈黙で「問題なし」と誤読させない）。Jira キャッシュの `fetched_at` が 2 営業日超なら「データが古い」を 1 行
-- 操作は `data/audit/` に 1 行追記（key と操作名のみ）
+- 操作は `data/audit/YYYY-MM-DD.jsonl` に 1 行追記: `{at, op, key}`（`op` = `ack` / `snooze`。key と操作名のみ）
+- 入力の検証: tasks・Jira キャッシュ・会議一覧の型・必須項目（`status` / `updated` / `fetched_at` / `start` 等）・日付形式が不正なら終了コード 2（`--snooze` / `--today` の日付不正も同じ。状態は変えない）。tasks.json が無いときも「入力なし」を詳細に 1 行出す
 
 ## 4. 受け入れ基準（実装時）
 1. `due` が今日 + 3 日は中で出る。+4 日は出ない（境界）
@@ -57,6 +58,9 @@
 ## 4.1 試作の範囲（emh-036）
 - 実装: `scripts/proactive_scan.py` + `morning_plan.py --proactive`（Q-021=a の統合）。テスト: `tests/test_proactive_scan.py`
 - 未実装（仕様のみ）: Jira キャッシュの TTL 14 日の読み飛ばし／`--snooze` の既定 2 営業日（日付は必須）／祝日／Jira キャッシュ複数 alias の突合（最新日次ファイルのみ読む）
+- 並べ順は段 → 期限超過日数（`gap`）→ id のみ。[17](17-task-priority-and-waiting.md) の 4 段（priority・blocks）は**未実装**
+- 既定のパスはスクリプトの位置（`__file__`）基準で、実行時の cwd に依存しない
+- 入力注記（入力なし・データが古い）は「詳細」に出す
 - 判断: 同じ対象が複数ルールに当たると、高い段の 1 行に統合する（key も高い方のルール名になる）
 
 ## 5. 非ゴール

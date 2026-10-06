@@ -242,5 +242,92 @@ class SafetyTest(unittest.TestCase):
         self.assertEqual(rows, [{"at": "2026-10-07", "op": "ack", "key": "due:t-1"}])
 
 
+class MalformedInputTest(unittest.TestCase):
+    T_OK = {"id": "t-1", "title": "x", "status": "open", "updated": "2026-10-01"}
+    ISSUE_OK = {"key": "EX-1", "status_category": "new", "updated": "2026-10-01", "links": []}
+
+    def _exit_code(self, tasks=None, jira=None, meetings=None, extra=()):
+        ws = Workspace(self, None)
+        if tasks is not None:
+            ws.tasks_p.write_text(json.dumps(tasks), encoding="utf-8")
+        if jira is not None:
+            (ws.jira_d / "ex-proj").mkdir(parents=True)
+            (ws.jira_d / "ex-proj" / "2026-10-07.json").write_text(json.dumps(jira), encoding="utf-8")
+        if meetings is not None:
+            ws.meet_p.write_text(json.dumps(meetings), encoding="utf-8")
+        ws.state_p.parent.mkdir(parents=True)
+        ws.state_p.write_text('{"k": {}}')
+        code = quiet_main(["--tasks", str(ws.tasks_p), "--jira-dir", str(ws.jira_d), "--meetings", str(ws.meet_p),
+                           "--state", str(ws.state_p), "--audit-dir", str(ws.dir / "audit"),
+                           "--today", "2026-10-07", *extra])
+        self.assertEqual(ws.state_p.read_text(), '{"k": {}}')
+        return code
+
+    def test_each_malformed_shape_exits_2_and_keeps_state(self):
+        ok_jira = {"fetched_at": "2026-10-07T08:00:00+09:00", "issues": [self.ISSUE_OK]}
+        cases = {
+            "tasks top-level list": dict(tasks=[]),
+            "tasks missing status": dict(tasks={"tasks": [{"id": "t-1", "title": "x", "updated": "2026-10-01"}]}),
+            "tasks updated null": dict(tasks={"tasks": [{**self.T_OK, "updated": None}]}),
+            "tasks bad due": dict(tasks={"tasks": [{**self.T_OK, "due": "soon"}]}),
+            "tasks entry not object": dict(tasks={"tasks": ["x"]}),
+            "jira top-level list": dict(tasks={"tasks": []}, jira=[]),
+            "jira no fetched_at": dict(tasks={"tasks": []}, jira={"issues": [self.ISSUE_OK]}),
+            "jira issue updated null": dict(tasks={"tasks": []}, jira={**ok_jira, "issues": [{**self.ISSUE_OK, "updated": None}]}),
+            "meetings top-level list": dict(tasks={"tasks": []}, meetings=[]),
+            "meeting start null": dict(tasks={"tasks": []}, meetings={"meetings": [{"id": "m-1", "title": "x", "start": None}]}),
+            "bad --today": dict(tasks={"tasks": []}, extra=["--today", "xx"]),
+        }
+        for name, kw in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self._exit_code(**kw), ps.EXIT_BROKEN)
+
+    def test_snooze_with_bad_date_exits_2_and_keeps_state(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        ws.run()
+        before = ws.state_p.read_text()
+        code = quiet_main(["--state", str(ws.state_p), "--audit-dir", str(ws.dir / "a"), "--today", "2026-10-07",
+                           "--snooze", "due:t-1", "10/9"])
+        self.assertEqual(code, ps.EXIT_BROKEN)
+        self.assertEqual(ws.state_p.read_text(), before)
+        self.assertFalse((ws.dir / "a").exists())
+
+    def test_missing_tasks_file_is_noted_not_silent(self):
+        ws = Workspace(self, None, issues=[], meetings=[])
+        shown, _, decisions, notes = ws.run()
+        self.assertTrue(any("タスク一覧: 入力なし" in n for n in notes))
+        self.assertIn("タスク一覧: 入力なし", ps.render(shown, 0, decisions, TODAY, notes))
+
+
+class DefaultPathTest(unittest.TestCase):
+    def test_defaults_are_absolute_under_repo_root(self):
+        args = ps.build_parser().parse_args([])
+        for value in (args.tasks, args.jira_dir, args.meetings, args.state, args.audit_dir):
+            self.assertTrue(value.startswith(str(ROOT / "data")), value)
+
+    def test_runs_from_another_cwd_without_touching_it(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            out = subprocess.run([sys.executable, str(ROOT / "scripts" / "proactive_scan.py"),
+                                  "--state", f"{tmp}/s.json", "--audit-dir", f"{tmp}/a",
+                                  "--tasks", str(EXAMPLES / "tasks.sample.json"), "--today", "2026-10-08"],
+                                 cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(out.returncode, ps.EXIT_NOTIFY, out.stderr)
+            self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ["s.json"])
+
+
+class ExpectedOutputTest(unittest.TestCase):
+    def test_sample_output_matches_expected_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            argv = ["--tasks", str(EXAMPLES / "tasks.sample.json"),
+                    "--jira-dir", str(ROOT / "tests" / "fixtures" / "sample-week" / "jira-cache"),
+                    "--meetings", str(EXAMPLES / "meetings.sample.json"), "--state", f"{tmp}/s.json",
+                    "--audit-dir", f"{tmp}/a", "--today", "2026-10-08"]
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ps.main(argv)
+        self.assertEqual(buf.getvalue(), (EXAMPLES / "expected-output.md").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

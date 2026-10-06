@@ -12,6 +12,8 @@ import tempfile
 from datetime import date, timedelta
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+TASK_STATUSES = ("open", "doing", "waiting", "done", "dropped")
 LEVELS = {"高": 0, "中": 1, "低": 2}
 MAX_SHOWN = 5
 MAX_NUDGES = 3
@@ -265,24 +267,84 @@ def _read_json(path, required=False):
         raise BrokenInput(f"{path} が壊れています（{exc}）")
 
 
+def _need_date(value, where, required=True):
+    if value is None:
+        if required:
+            raise BrokenInput(f"{where} の日付がありません")
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        raise BrokenInput(f"{where} の日付が不正です")
+
+
+def _need_dict(value, where):
+    if not isinstance(value, dict):
+        raise BrokenInput(f"{where} の形式が不正です")
+    return value
+
+
+def _need_list(value, where):
+    if not isinstance(value, list):
+        raise BrokenInput(f"{where} の形式が不正です")
+    return value
+
+
+def validate_tasks(tasks, where):
+    for i, t in enumerate(_need_list(tasks, where)):
+        at = f"{where}[{i}]"
+        _need_dict(t, at)
+        if not isinstance(t.get("id"), str) or t.get("status") not in TASK_STATUSES:
+            raise BrokenInput(f"{at} の id/status が不正です")
+        _need_date(t.get("due"), at, required=False)
+        _need_date(t.get("next_check"), at, required=False)
+        _need_date(t.get("updated"), at)
+        for h in _need_list(t.get("history", []), at):
+            if not isinstance(h, dict) or "op" not in h:
+                raise BrokenInput(f"{at} の history が不正です")
+    return tasks
+
+
+def validate_issues(issues, where):
+    for i, it in enumerate(_need_list(issues, where)):
+        at = f"{where}[{i}]"
+        _need_dict(it, at)
+        if not isinstance(it.get("key"), str) or "status_category" not in it:
+            raise BrokenInput(f"{at} の key/status_category が不正です")
+        _need_date(it.get("updated"), at)
+        for lk in _need_list(it.get("links", []), at):
+            if not isinstance(lk, dict) or not {"link_type", "direction", "issue_key"} <= set(lk):
+                raise BrokenInput(f"{at} の links が不正です")
+    return issues
+
+
+def validate_meetings(meetings, where):
+    for i, m in enumerate(_need_list(meetings, where)):
+        at = f"{where}[{i}]"
+        _need_dict(m, at)
+        if not isinstance(m.get("id"), str) or not isinstance(m.get("title"), str):
+            raise BrokenInput(f"{at} の id/title が不正です")
+        _need_date(m.get("start"), at)
+    return meetings
+
+
 def load_inputs(tasks_path, jira_dir, meetings_path):
-    """戻り値: (tasks, issues|None, jira_fetched_at|None, meetings|None)。不在は None、破損は BrokenInput。"""
+    """戻り値: (tasks|None, issues|None, jira_fetched_at|None, meetings|None)。不在は None、破損は BrokenInput。"""
     tasks_doc = _read_json(tasks_path)
-    tasks = [] if tasks_doc is None else tasks_doc.get("tasks")
-    if not isinstance(tasks, list):
-        raise BrokenInput(f"{tasks_path} の形式が不正です")
+    tasks = None
+    if tasks_doc is not None:
+        tasks = validate_tasks(_need_dict(tasks_doc, str(tasks_path)).get("tasks"), str(tasks_path))
     issues, fetched = None, None
     files = sorted(Path(jira_dir).glob("*/*.json")) if Path(jira_dir).is_dir() else []
     if files:
         latest = max(files, key=lambda p: p.name)
-        doc = _read_json(latest)
-        issues, fetched = doc.get("issues"), doc.get("fetched_at")
-        if not isinstance(issues, list):
-            raise BrokenInput(f"{latest} の形式が不正です")
+        doc = _need_dict(_read_json(latest), str(latest))
+        issues = validate_issues(doc.get("issues"), str(latest))
+        fetched = _need_date(doc.get("fetched_at"), f"{latest} の fetched_at")
     meetings_doc = _read_json(meetings_path)
-    meetings = None if meetings_doc is None else meetings_doc.get("meetings")
-    if meetings_doc is not None and not isinstance(meetings, list):
-        raise BrokenInput(f"{meetings_path} の形式が不正です")
+    meetings = None
+    if meetings_doc is not None:
+        meetings = validate_meetings(_need_dict(meetings_doc, str(meetings_path)).get("meetings"), str(meetings_path))
     return tasks, issues, fetched, meetings
 
 
@@ -314,7 +376,11 @@ def append_audit(audit_dir, today, key, op):
 
 # ---- 出力 ----
 
-def render_section(shown, overflow, decisions, today, notes=()):
+def detail_lines(notes):
+    return [f"- {n}" for n in notes]
+
+
+def render_section(shown, overflow, decisions, today):
     """朝の計画に載せる「先回り」節（見出しを含む）。"""
     out = ["## 先回り（観察）"]
     if not shown:
@@ -332,7 +398,6 @@ def render_section(shown, overflow, decisions, today, notes=()):
         for f in asks:
             ask = f.get("ask") or "A) keep B) drop（おすすめ: A・来週まで）。表示 3 回で動きがなかったため、以後は繰り返しません"
             out.append(f"- {f['ref']} {f.get('title', '')} {f['fact']}。{ask} `{f['key']}`".replace("  ", " "))
-    out += [f"- 入力注記: {n}" for n in notes]
     return out
 
 
@@ -345,8 +410,9 @@ def render(shown, overflow, decisions, today, notes=()):
     else:
         head = "🟢 順調: 先回り対応不要"
     todo = "先回りの各件を確認" if shown else "対応不要"
-    body = render_section(shown, overflow, decisions, today, notes)
-    return "\n".join([f"# 先回り {today.isoformat()}", "", head, "", f"**EM がやること**: {todo}", ""] + body) + "\n"
+    body = render_section(shown, overflow, decisions, today)
+    detail = ["", "## 詳細"] + detail_lines(notes) if notes else []
+    return "\n".join([f"# 先回り {today.isoformat()}", "", head, "", f"**EM がやること**: {todo}", ""] + body + detail) + "\n"
 
 
 def collect(args_paths, today, digest=False, persist=True):
@@ -354,9 +420,12 @@ def collect(args_paths, today, digest=False, persist=True):
     tasks_p, jira_d, meet_p, state_p = args_paths
     tasks, issues, fetched, meetings = load_inputs(tasks_p, jira_d, meet_p)
     notes = []
+    if tasks is None:
+        notes.append("タスク一覧: 入力なし（期限・返信待ち・放置は未判定）")
+        tasks = []
     if issues is None:
         notes.append("Jira キャッシュ: 入力なし（ブロッカー・放置の Jira 分は未判定）")
-    elif bdays_between(_day(fetched), today) > JIRA_CACHE_OLD_BDAYS:
+    elif bdays_between(fetched, today) > JIRA_CACHE_OLD_BDAYS:
         notes.append("Jira キャッシュのデータが古い")
     if meetings is None:
         notes.append("会議一覧: 入力なし（会議準備は未判定）")
@@ -369,24 +438,35 @@ def collect(args_paths, today, digest=False, persist=True):
     return shown, overflow, decisions, notes
 
 
-def main(argv=None):
+def build_parser():
     ap = argparse.ArgumentParser(description="先回り検知（読み取り＋状態ファイルのみ）")
-    ap.add_argument("--tasks", default="data/tasks/tasks.json")
-    ap.add_argument("--jira-dir", default="data/jira-cache")
-    ap.add_argument("--meetings", default="data/meetings/meetings.json")
-    ap.add_argument("--state", default="data/state/proactive.json")
-    ap.add_argument("--audit-dir", default="data/audit")
+    ap.add_argument("--tasks", default=str(ROOT / "data/tasks/tasks.json"))
+    ap.add_argument("--jira-dir", default=str(ROOT / "data/jira-cache"))
+    ap.add_argument("--meetings", default=str(ROOT / "data/meetings/meetings.json"))
+    ap.add_argument("--state", default=str(ROOT / "data/state/proactive.json"))
+    ap.add_argument("--audit-dir", default=str(ROOT / "data/audit"))
     ap.add_argument("--today", default=date.today().isoformat())
     ap.add_argument("--digest", action="store_true", help="低（放置）の週次要約")
     ap.add_argument("--ack", metavar="KEY")
     ap.add_argument("--snooze", nargs=2, metavar=("KEY", "DATE"))
-    args = ap.parse_args(argv)
-    today = _day(args.today)
+    return ap
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    try:
+        today = _need_date(args.today, "--today")
+    except BrokenInput as exc:
+        sys.stderr.write(f"入力エラー: {exc}。状態は変更していません\n")
+        return EXIT_BROKEN
     if args.ack or args.snooze:
         key = args.ack or args.snooze[0]
         try:
-            until = _day(args.snooze[1]) if args.snooze else None
+            until = _need_date(args.snooze[1], "--snooze") if args.snooze else None
             save_state(args.state, apply_ack(load_state(args.state), key, until))
+        except BrokenInput as exc:
+            sys.stderr.write(f"入力エラー: {exc}。状態は変更していません\n")
+            return EXIT_BROKEN
         except KeyError:
             sys.stderr.write(f"key {key} は状態にありません\n")
             return EXIT_BROKEN

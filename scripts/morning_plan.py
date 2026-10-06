@@ -9,6 +9,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+
 MAX_TOP = 5
 MAX_CANDIDATES = 5
 SOON_DAYS = 3
@@ -28,7 +30,10 @@ def _load(path, key):
         return []
     except json.JSONDecodeError as exc:
         raise SystemExit(f"{path} が壊れています（{exc.msg}）。.bak からの復元を提案します。上書きはしません")
-    return data.get(key, [])
+    items = data.get(key, []) if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        raise SystemExit(f"{path} の形式が不正です。上書きはしません")
+    return items
 
 
 def _visible(task, today):
@@ -84,7 +89,7 @@ def _line(task, today):
     return f"{task['id']} {task['title']}{tail}"
 
 
-def render(plan, proactive_lines=()):
+def render(plan, proactive_lines=(), detail_extra=()):
     today = plan["today"]
     if plan["overdue"]:
         status, head = "🔴 要対応", f"期限超過 {len(plan['overdue'])} 件"
@@ -118,35 +123,42 @@ def render(plan, proactive_lines=()):
             out.append(f"- ほか {plan['candidate_overflow']} 件")
     if proactive_lines:
         out += ["", *proactive_lines]
-    out += ["", "## 詳細", "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）",
+    out += ["", "## 詳細", *detail_extra, "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）",
             "- 並べ順は暫定: 期限超過 → 今日 → 3日以内 → 優先度 now/soon/later → 他を止めている数 → 期限順"]
     return "\n".join(out) + "\n"
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="今日の計画を生成する（読み取り専用）")
-    ap.add_argument("--tasks", default="data/tasks/tasks.json")
-    ap.add_argument("--candidates", default="data/tasks/candidates.json")
+    ap.add_argument("--tasks", default=str(ROOT / "data/tasks/tasks.json"))
+    ap.add_argument("--candidates", default=str(ROOT / "data/tasks/candidates.json"))
     ap.add_argument("--today", default=date.today().isoformat())
     ap.add_argument("--proactive", action="store_true", help="先回り節を載せる（状態ファイルを更新する）")
-    ap.add_argument("--jira-dir", default="data/jira-cache")
-    ap.add_argument("--meetings", default="data/meetings/meetings.json")
-    ap.add_argument("--state", default="data/state/proactive.json")
+    ap.add_argument("--jira-dir", default=str(ROOT / "data/jira-cache"))
+    ap.add_argument("--meetings", default=str(ROOT / "data/meetings/meetings.json"))
+    ap.add_argument("--state", default=str(ROOT / "data/state/proactive.json"))
     args = ap.parse_args(argv)
-    today = _day(args.today)
-    plan = build_plan(_load(args.tasks, "tasks"), _load(args.candidates, "candidates"), today)
-    lines = ()
+    try:
+        today = _day(args.today)
+    except ValueError:
+        raise SystemExit("--today の日付が不正です")
+    lines, detail = (), ()
     if args.proactive:
         import proactive_scan as ps
         try:
             shown, overflow, decisions, notes = ps.collect((args.tasks, args.jira_dir, args.meetings, args.state), today)
         except ps.BrokenInput as exc:
             raise SystemExit(f"先回り入力エラー: {exc}。状態は変更していません")
-        lines = ps.render_section(shown, overflow, decisions, today, notes)
+        lines, detail = ps.render_section(shown, overflow, decisions, today), ps.detail_lines(notes)
+    try:
+        plan = build_plan(_load(args.tasks, "tasks"), _load(args.candidates, "candidates"), today)
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise SystemExit(f"入力の形式が不正です（{type(exc).__name__}）。上書きはしません")
+    if args.proactive:
         # 判断依頼に回った返信待ちは、催促の下書き対象から外す（17 §2: 3 回目は下書きを出さない）
         asked = {f["ref"] for f in shown if f["key"] in decisions and f["rule"] == "waiting"}
         plan = {**plan, "nudges": [t for t in plan["nudges"] if t["id"] not in asked]}
-    sys.stdout.write(render(plan, lines))
+    sys.stdout.write(render(plan, lines, detail))
 
 
 if __name__ == "__main__":

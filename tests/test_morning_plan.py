@@ -88,10 +88,6 @@ class MorningPlanTest(unittest.TestCase):
         self.assertEqual(mp._load("/nonexistent/tasks.json", "tasks"), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class MorningPlanProactiveTest(unittest.TestCase):
     def test_proactive_section_is_added_only_when_requested(self):
         import contextlib
@@ -129,3 +125,26 @@ class MorningPlanProactiveTest(unittest.TestCase):
         out = buf.getvalue()
         self.assertNotIn("返信待ちの催促候補", out)
         self.assertIn("判断依頼", out)
+
+    def _run_with(self, tasks_text):
+        import contextlib
+        import io
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(f"{tmp}/t.json").write_text(tasks_text, encoding="utf-8")
+            argv = ["--tasks", f"{tmp}/t.json", "--candidates", f"{tmp}/c.json", "--today", "2026-10-04",
+                    "--proactive", "--jira-dir", f"{tmp}/j", "--meetings", f"{tmp}/m.json", "--state", f"{tmp}/s.json"]
+            with contextlib.redirect_stdout(io.StringIO()):
+                mp.main(argv)
+
+    def test_malformed_inputs_stop_with_message_instead_of_traceback(self):
+        for text in ("[]", '{"tasks": [{"id": "t-1", "title": "x"}]}',
+                     '{"tasks": [{"id": "t-1", "title": "x", "status": "open", "updated": null}]}',
+                     '{"tasks": [{"id": "t-1", "title": "x", "status": "open", "updated": "2026-10-01", "due": "bad"}]}'):
+            with self.subTest(text=text), self.assertRaises(SystemExit) as cm:
+                self._run_with(text)
+            self.assertIsInstance(cm.exception.code, str)
+
+
+if __name__ == "__main__":
+    unittest.main()
