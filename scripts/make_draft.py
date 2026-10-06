@@ -7,7 +7,6 @@ L1（下書きまで）。stdlib のみ・外部接続なし。送信・投稿�
 """
 import argparse
 import json
-import os
 import re
 import sys
 from datetime import date
@@ -22,7 +21,9 @@ BANNED = re.compile(r"送信しました|更新しました|送りました|投�
 # 約束・催促になる語は本文に入れず ⟦EM が決める⟧ に寄せる（E2）
 COMMITMENT = re.compile(r"までにお願い|までにやります|担当します|対応します|お約束")
 SENSITIVE = re.compile(r"https?://|xox[bp]-|token", re.I)
-HANDLE = re.compile(r"^(member|m|em|ex)[-_][\w-]+$")
+HANDLE = re.compile(r"(member|m|em|ex)[-_][A-Za-z0-9]{1,12}", re.ASCII)
+MARKERS = ("■", "⟦", "⟧", BANNER, "出典:", "出典：", "対象:", "対象：", "観察:", "観察：")  # 型の見出しを本文で偽造させない
+MAX_EM_DECIDES = 5
 QUESTION = re.compile(r"[？?]|か。")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -51,7 +52,11 @@ def _need(data, key):
     return value.strip()
 
 
-def _check_text(label, text):
+def _check_text(label, text, single_line=True):
+    if single_line and ("\n" in text or "\r" in text):
+        raise DraftError(f"{label} に改行は使えません")
+    if any(m in text for m in MARKERS):
+        raise DraftError(f"{label} に型の見出し用の文字列（■ ⟦ ⟧ 出典: 等）は使えません")
     if len(text) > MAX_BODY_CHARS:
         raise DraftError(f"{label} が {MAX_BODY_CHARS} 字を超えています")
     if BANNED.search(text):
@@ -74,7 +79,7 @@ def validate(scene, data):
     for key in spec["source_keys"]:
         _check_text(key, _need(data, key))
     handle = _need(data, "handle")
-    if not HANDLE.match(handle):
+    if not HANDLE.fullmatch(handle):
         raise DraftError(f"handle は匿名ハンドルにしてください: {handle}")
     if scene == "slack-reply" and not DATE_RE.match(_need(data, "source_date")):
         raise DraftError("source_date は YYYY-MM-DD にしてください")
@@ -84,14 +89,16 @@ def validate(scene, data):
     for i, body in enumerate(variants, 1):
         if not isinstance(body, str) or not body.strip():
             raise DraftError(f"variants[{i}] が空です")
-        _check_text(f"variants[{i}]", body)
+        _check_text(f"variants[{i}]", body, single_line=False)
         if scene == "jira-comment" and len(QUESTION.findall(body)) > 1:
             raise DraftError(f"variants[{i}] は 1 コメント 1 問にしてください")
     decides = data.get("em_decides")
-    if not isinstance(decides, list) or not decides:
-        raise DraftError("em_decides（EM が決める項目）が空です。なければ「なし」と 1 件書いてください")
-    for item in decides:
-        _check_text("em_decides", str(item))
+    if not isinstance(decides, list) or not 1 <= len(decides) <= MAX_EM_DECIDES:
+        raise DraftError(f"em_decides は 1〜{MAX_EM_DECIDES} 件にしてください。なければ「なし」と 1 件書いてください")
+    for i, item in enumerate(decides, 1):
+        if not isinstance(item, str) or not item.strip():
+            raise DraftError(f"em_decides[{i}] は空でない文字列にしてください")
+        _check_text(f"em_decides[{i}]", item)
     return draft_type
 
 
@@ -109,20 +116,18 @@ def render(scene, data):
     return f"{head}\n\n" + "\n\n".join(body) + f"\n\n⟦EM が決める⟧\n{decides}\n"
 
 
-def _next_path(out_dir, scene, today):
-    n = 1
-    while (out_dir / f"{today.isoformat()}-{scene}-{n:02d}.md").exists():
-        n += 1
-    return out_dir / f"{today.isoformat()}-{scene}-{n:02d}.md"
-
-
 def write_draft(out_dir, scene, text, today):
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = _next_path(out_dir, scene, today)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
-    return path
+    n = 1
+    while True:
+        path = out_dir / f"{today.isoformat()}-{scene}-{n:02d}.md"
+        try:
+            # 排他作成（O_EXCL）。既存ファイル・symlink があれば開けず、番号を進める
+            with open(path, "x", encoding="utf-8") as fh:
+                fh.write(text)
+            return path
+        except FileExistsError:
+            n += 1
 
 
 def main(argv=None):

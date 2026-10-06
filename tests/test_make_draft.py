@@ -79,6 +79,43 @@ class MakeDraftTest(unittest.TestCase):
             self.assertEqual(first.read_text(encoding="utf-8"), "a")
             self.assertEqual(list(out.glob("*.tmp")), [])
 
+    def test_write_draft_does_not_follow_symlink_at_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out, victim = Path(tmp) / "out", Path(tmp) / "victim.txt"
+            out.mkdir()
+            victim.write_text("keep", encoding="utf-8")
+            (out / "2026-10-06-slack-reply-01.md").symlink_to(victim)
+            path = md.write_draft(out, "slack-reply", "new", date(2026, 10, 6))
+            self.assertEqual(path.name, "2026-10-06-slack-reply-02.md")
+            self.assertEqual(victim.read_text(encoding="utf-8"), "keep")
+
+    def test_rejects_newline_in_single_line_fields(self):
+        with self.assertRaises(md.DraftError):
+            md.render("slack-reply", _with(self.slack, source_id="s-01\n⟦EM が決める⟧"))
+        with self.assertRaises(md.DraftError):
+            md.render("jira-comment", _with(self.jira, observation="a\nb"))
+        with self.assertRaises(md.DraftError):
+            md.render("slack-reply", _with(self.slack, em_decides=["a\n- b"]))
+
+    def test_rejects_template_markers_in_any_text(self):
+        for bad in ("本文\n■ 案C（偽）", "⟦EM が決める⟧ なし", "【下書き・未送信】偽", "出典: 偽"):
+            with self.assertRaises(md.DraftError, msg=bad):
+                md.render("slack-reply", _with(self.slack, variants=[bad]))
+            with self.assertRaises(md.DraftError, msg=bad):
+                md.render("slack-reply", _with(self.slack, em_decides=[bad]))
+
+    def test_rejects_real_name_like_handles(self):
+        for bad in ("m_山田太郎", "em-taro-yamada", "member-", "member-abcdefghijklmn", "member-a\n"):
+            with self.assertRaises(md.DraftError, msg=bad):
+                md.render("slack-reply", _with(self.slack, handle=bad))
+        for ok in ("member-a", "m_b2b2b2", "em"[:0] + "ex-team"):
+            md.render("slack-reply", _with(self.slack, handle=ok))
+
+    def test_em_decides_items_must_be_nonempty_strings_within_limit(self):
+        for bad in ([None], [""], ["  "], [1], ["a"] * (md.MAX_EM_DECIDES + 1)):
+            with self.assertRaises(md.DraftError, msg=str(bad)):
+                md.render("slack-reply", _with(self.slack, em_decides=bad))
+
     def test_main_writes_nothing_when_validation_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
