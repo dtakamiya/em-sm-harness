@@ -1,0 +1,5 @@
+{"version":1,"meetings":[
+ {"id":"m-0001","title":"リリース判断ミーティング","start":"2026-10-08","prep_task_id":"t-0003"},
+ {"id":"m-0002","title":"週次ステークホルダー報告","start":"2026-10-08","prep_task_id":null},
+ {"id":"m-0003","title":"スプリントレビュー","start":"2026-10-12","prep_task_id":null}
+]}
