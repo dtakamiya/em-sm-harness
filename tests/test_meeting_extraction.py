@@ -103,6 +103,26 @@ class MeetingExtractionTest(unittest.TestCase):
             self.assertEqual(derive_candidates(f["source"], f["items"]), f["candidates"], f["source"])
             self.assertTrue(f["candidates"], f["source"])
 
+    def test_medium_em_action_flows_to_candidates(self):
+        items = [i for f in EXPECTED["files"] for i in f["items"]]
+        medium = [i for i in items if i["kind"] == "action_item" and i["confidence"] == "medium" and i["owner"] == "em"]
+        self.assertTrue(medium)
+        refs = {c["source_ref"] for f in EXPECTED["files"] for c in f["candidates"]}
+        for f in EXPECTED["files"]:
+            for i in f["items"]:
+                if i in medium:
+                    self.assertIn(f"{f['source']}:{i['id']}", refs)
+
+    def test_needs_em_true_only_when_em_is_named_in_the_line(self):
+        found = False
+        for f, lines in self.each_file():
+            for i in f["items"]:
+                if i["kind"] == "open_question" and i["needs_em"]:
+                    found = True
+                    self.assertEqual(i["asked_of"], ["em"])
+                    self.assertRegex(lines[i["evidence"]["line"] - 1], r"\bem\b")
+        self.assertTrue(found)
+
     def test_fixture_notes_contain_only_fictional_handles_and_no_urls(self):
         for f in EXPECTED["files"]:
             text = (FIXTURES / f["source"]).read_text(encoding="utf-8")

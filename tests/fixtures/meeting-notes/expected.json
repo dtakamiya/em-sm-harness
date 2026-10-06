@@ -60,13 +60,24 @@
          "evidence": {"line": 3, "quote": "顧客向け説明の要否を判断する"}, "confidence": "high"},
         {"id": "m-04", "kind": "action_item", "owner": "m_b2b2b2", "to_em": false, "due_raw": null,
          "observation": "m_b2b2b2 がレビュー依頼を出す、とメモにある",
-         "evidence": {"line": 4, "quote": "レビュー依頼を出す"}, "confidence": "high"}
+         "evidence": {"line": 4, "quote": "レビュー依頼を出す"}, "confidence": "high"},
+        {"id": "m-05", "kind": "action_item", "owner": "em", "to_em": true, "due_raw": null,
+         "observation": "em がベンダーへの回答を見ておく、とメモにある。依頼か意向かは文脈に依存する",
+         "evidence": {"line": 6, "quote": "ベンダーへの回答を見ておく"}, "confidence": "medium"},
+        {"id": "m-06", "kind": "open_question", "asked_of": ["em"], "needs_em": true,
+         "observation": "顧客向け説明を出すかが em の判断待ち、とメモにある",
+         "evidence": {"line": 7, "quote": "顧客向け説明を出すかは em の判断待ち"}, "confidence": "high"}
       ],
       "excluded": [
         {"line": 5, "reason": "会議の日程であり、決定・依頼・未決のいずれでもない"}
       ],
+      "notes": [
+        "4行目の「em さんにも共有する」は m_b2b2b2 のレビュー依頼の共有先であり、em への依頼ではない。別 item にせず to_em も false のまま（宛先の明示がないため）",
+        "6行目は「見ておく」で依頼か意向かが文脈依存のため medium。EM 本人のアクションなので candidates に流す（§7）"
+      ],
       "candidates": [
-        {"source_ref": "2026-10-08-ex-review.md:m-03", "suggested_due": null}
+        {"source_ref": "2026-10-08-ex-review.md:m-03", "suggested_due": null},
+        {"source_ref": "2026-10-08-ex-review.md:m-05", "suggested_due": null}
       ]
     }
   ]
