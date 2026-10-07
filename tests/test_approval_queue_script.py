@@ -244,6 +244,23 @@ class ReviewRegressionTest(unittest.TestCase):
                 self.assertIsNotNone(aq.validate_action(action("a-1", **{key: text})), f"{key}:{text!r}")
             self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=[text])), repr(text))
 
+    def test_allowlist_rejects_space_like_and_combining_characters(self):
+        cases = ("お\u2800願いします", "a\ufffcb", "a\u17b4b", "a\u17b5b", "a\U00016fe4b", "a\u00a0b", "a\u2003b",
+                 "a\u0300b", "か\u3099", "a\u20ddb", "a\u0903b")  # 点字空白・物体置換・クメール・Khitan・NBSP・EM SP・結合文字
+        for text in cases:
+            for key in ("title", "target", "body"):
+                self.assertIsNotNone(aq.validate_action(action("a-1", **{key: text})), f"{key}:{text!r}")
+
+    def test_normal_japanese_text_is_still_accepted(self):
+        raw = action("a-1", title="議事録の確定版（第２回）", body="共有ありがとうございます。ＡＢＣ　１２３ → ok", target="example-channel",
+                     em_decides=["次回の確認日を決める（おすすめ: 決めない）"])
+        self.assertIsNone(aq.validate_action(raw))
+
+    def test_urgent_word_is_banned_in_title_and_em_decides_only(self):
+        self.assertIsNotNone(aq.validate_action(action("a-1", title="緊急の件")))
+        self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=["緊 急 対応"])))
+        self.assertIsNone(aq.validate_action(action("a-1", body="緊急ではありません")))
+
     def test_lone_surrogate_does_not_crash_loading(self):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "a.json").write_text('{"action_id":"a-1","kind":"minutes","title":"\\ud800題名","target":"x",'
@@ -252,7 +269,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual((actions, len(rejected)), ([], 1))
 
     def test_urgent_marker_forgery_is_rejected(self):
-        for text in ("【緊急】対応", "［緊急］対応", "[緊急] x", "【 緊急 】x", "〔緊急〕x", "〖緊急〗x", "【緊 急】x", "（緊急）x"):
+        for text in ("【緊急】対応", "［緊急］対応", "[緊急] x", "【 緊急 】x", "〔緊急〕x", "〖緊急〗x", "【緊 急】x", "（緊急）x",
+                     "【緊急対応】x", "《緊急》x", "「緊急」x", "〘緊急〙x", "【緊\u0300急】x", "緊/急"):
             self.assertIsNotNone(aq.validate_action(action("a-1", title=text)), text)
             self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=[text])), text)
 

@@ -43,13 +43,15 @@ MAX_RENDER_CHARS = 3000  # 上限いっぱいの入力でも超えない紙面�
 BULK_KINDS = ("minutes", "retro_agenda")
 ID_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 KIND_RE = re.compile(r"[a-z_]{1,32}")
-# 制御文字（Cc）・書式制御（Cf: U+202E など）・行/段落区切り（Zl・Zp）は紙面の偽装に使えるので全項目で拒否する
-# Cs（孤立サロゲート）・Co（私用領域）・Cn（未割当）も拒否。表示されない文字のすり抜けとクラッシュを防ぐ
-FORBIDDEN_CATEGORIES = ("Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn")
-# 見えないのにカテゴリでは弾けない文字（異体字セレクタ・結合用の字・ハングル/全角の空白様フィラーなど）をコード点で拒否
+# 題名・本文・対象・em_decides に使える文字は許可リスト方式: 文字（L*）・数字（N*）・句読点（P*）・記号（S*）と、
+# 空白は U+0020 と U+3000 のみ。結合文字（M*）・制御/書式制御（C*）・その他の空白（Z*）は全て拒否する。
+# 許可カテゴリの中でも見えない/紛らわしい文字は個別に拒否する（点字空白 U+2800、物体置換 U+FFFC、フィラー類）
+ALLOWED_CATEGORY_INITIALS = "LNPS"
+ALLOWED_SPACES = (" ", "\u3000")
 INVISIBLE_CODEPOINTS = frozenset(
-    [0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, *range(0x180B, 0x180E), *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)])
-URGENT_FORGERY = re.compile(r"[【\[〔〖(]\s*緊\s*急\s*[】\]〕〗)]")
+    [0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, 0xFFFC, 0x17B4, 0x17B5, 0x16FE4,
+     *range(0x2800, 0x2900), *range(0x180B, 0x180E), *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)])
+URGENT_WORD = "緊急"
 # 部分一致の誤除外を避ける: 「更新しましたか？」「tokenizer」は通し、断定の送信済み表現・URL・トークンだけ弾く
 SENT_CLAIM = re.compile(r"(送信|更新|投稿|送り)(しました|済み)(?![かの？?])|送りました|(送|投稿|更新|返信)(っ|し)ておきました")
 EVAL_WORDS = re.compile(r"遅い人|やる気がない|低パフォーマー")
@@ -74,15 +76,22 @@ def _norm(text):
     return unicodedata.normalize("NFKC", text)
 
 
-def _check_field(label, text):
-    """全項目共通: 制御文字・見出しの偽装・【緊急】の偽装を拒否（1 行に限る）。"""
-    if any(unicodedata.category(ch) in FORBIDDEN_CATEGORIES or ord(ch) in INVISIBLE_CODEPOINTS for ch in text):
-        return f"{label} に制御文字・改行・書式制御文字・不可視文字は使えません（1 行にしてください）"
+def _is_allowed_char(ch):
+    if ch in ALLOWED_SPACES:
+        return True
+    return unicodedata.category(ch)[0] in ALLOWED_CATEGORY_INITIALS and ord(ch) not in INVISIBLE_CODEPOINTS
+
+
+def _check_field(label, text, forbid_urgent=False):
+    """全項目共通: 許可リスト外の文字・見出しの偽装を拒否（1 行に限る）。題名・em_decides は【緊急】の偽装も拒否。"""
     norm = _norm(text)
+    if not all(_is_allowed_char(ch) for ch in text + norm):
+        return f"{label} に使えない文字があります（改行・制御・結合・不可視・空白様の文字。文字・数字・句読点・記号と通常の空白だけ使えます）"
     if any(m in text or m in norm for m in MARKERS):
         return f"{label} に型の見出し用の文字列（■ ⟦ ⟧ 出典: 等）は使えません"
-    if URGENT_FORGERY.search(norm):
-        return f"{label} に【緊急】は書けません（緊急は優先度と期限から自動で付きます）"
+    letters = "".join(ch for ch in norm if unicodedata.category(ch)[0] in "LN")
+    if forbid_urgent and URGENT_WORD in letters:
+        return f"{label} に「緊急」は書けません（偽装防止。緊急の表示は優先度と期限から自動で付きます）"
     return None
 
 
@@ -129,7 +138,7 @@ def validate_action(raw, extra_patterns=()):
             return f"{key} は {limit} 字以内にしてください（60 秒で読める量）"
     for label, text in [("title", raw["title"]), ("target", raw["target"]), ("body", raw["body"]),
                         *[("em_decides", d) for d in decides]]:
-        reason = _check_field(label, text)
+        reason = _check_field(label, text, forbid_urgent=label in ("title", "em_decides"))
         if reason:
             return reason
     text = _norm(" ".join([raw["title"], raw["target"], raw["body"], *decides]))
