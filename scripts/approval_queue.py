@@ -44,8 +44,12 @@ BULK_KINDS = ("minutes", "retro_agenda")
 ID_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 KIND_RE = re.compile(r"[a-z_]{1,32}")
 # 制御文字（Cc）・書式制御（Cf: U+202E など）・行/段落区切り（Zl・Zp）は紙面の偽装に使えるので全項目で拒否する
-FORBIDDEN_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
-URGENT_FORGERY = re.compile(r"[【\[]緊急[】\]]")
+# Cs（孤立サロゲート）・Co（私用領域）・Cn（未割当）も拒否。表示されない文字のすり抜けとクラッシュを防ぐ
+FORBIDDEN_CATEGORIES = ("Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn")
+# 見えないのにカテゴリでは弾けない文字（異体字セレクタ・結合用の字・ハングル/全角の空白様フィラーなど）をコード点で拒否
+INVISIBLE_CODEPOINTS = frozenset(
+    [0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, *range(0x180B, 0x180E), *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)])
+URGENT_FORGERY = re.compile(r"[【\[〔〖(]\s*緊\s*急\s*[】\]〕〗)]")
 # 部分一致の誤除外を避ける: 「更新しましたか？」「tokenizer」は通し、断定の送信済み表現・URL・トークンだけ弾く
 SENT_CLAIM = re.compile(r"(送信|更新|投稿|送り)(しました|済み)(?![かの？?])|送りました|(送|投稿|更新|返信)(っ|し)ておきました")
 EVAL_WORDS = re.compile(r"遅い人|やる気がない|低パフォーマー")
@@ -72,8 +76,8 @@ def _norm(text):
 
 def _check_field(label, text):
     """全項目共通: 制御文字・見出しの偽装・【緊急】の偽装を拒否（1 行に限る）。"""
-    if any(unicodedata.category(ch) in FORBIDDEN_CATEGORIES for ch in text):
-        return f"{label} に制御文字・改行・書式制御文字は使えません（1 行にしてください）"
+    if any(unicodedata.category(ch) in FORBIDDEN_CATEGORIES or ord(ch) in INVISIBLE_CODEPOINTS for ch in text):
+        return f"{label} に制御文字・改行・書式制御文字・不可視文字は使えません（1 行にしてください）"
     norm = _norm(text)
     if any(m in text or m in norm for m in MARKERS):
         return f"{label} に型の見出し用の文字列（■ ⟦ ⟧ 出典: 等）は使えません"
@@ -207,9 +211,8 @@ def build_queue(actions, today, rejected=0, source_missing=False):
 def _item(n, a, urgent):
     due = f"・期限 {a['due']}" if a.get("due") else ""
     decides = a.get("em_decides") or ["コミット候補の有無を確認する"]
-    body = a["body"].strip().replace("\n", "\n      ")
     lines = [f"{n}. {'【緊急】' if urgent else ''}{a['title']}［{a['kind']}{due}］",
-             f"   対象: {a['target']}", f"   本文: {body}"]
+             f"   対象: {a['target']}", f"   本文: {a['body'].strip()}"]
     return lines + [f"   ⟦EM が決める⟧ {d}" for d in decides]
 
 

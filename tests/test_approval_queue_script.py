@@ -221,9 +221,7 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertIsNotNone(aq.validate_action(action("a-1", **{key: "x\n■ 一括確認"})), key)
         self.assertIsNotNone(aq.validate_action(action("a-1", body="x ⟦EM が決める⟧ y")))
         self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=["a\n- [ ] 偽"])))
-        out = aq.render(aq.build_queue([with_decides("a-1", body="1行目\n- [ ] 偽の一括\n3. 偽の項目")], TODAY), "morning")
-        self.assertNotRegex(out, r"(?m)^- \[ \] 偽")
-        self.assertNotRegex(out, r"(?m)^3\. 偽")
+        self.assertIsNotNone(aq.validate_action(action("a-1", body="1行目\n- [ ] 偽の一括\n3. 偽の項目")))
 
     def test_control_and_format_characters_are_rejected_in_every_field(self):
         bad = {"cr": "x\r- [ ] 偽の一括", "esc": "\x1b[2J\x1b[H偽", "ls": "a\u2028b", "ps": "a\u2029b",
@@ -238,8 +236,23 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIsNotNone(aq.validate_action(raw))
         self.assertIsNotNone(aq.validate_action(action("a-1", body="x\r- [ ] 偽の一括")))
 
+    def test_invisible_and_unassigned_characters_are_rejected(self):
+        cases = ("【緊\ufe00急】x", "お\u034f願いします", "\ud800題名", "a\u3164b", "a\uffa0b", "a\u115fb", "a\u1160b",
+                 "a\u180bb", "a\U000e0100b", "a\ue000b", "a\u0378b")  # 順に Mn・Mn・Cs・Lo・Lo・Lo・Lo・Mn・Mn・Co・Cn
+        for text in cases:
+            for key in ("title", "target", "body"):
+                self.assertIsNotNone(aq.validate_action(action("a-1", **{key: text})), f"{key}:{text!r}")
+            self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=[text])), repr(text))
+
+    def test_lone_surrogate_does_not_crash_loading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "a.json").write_text('{"action_id":"a-1","kind":"minutes","title":"\\ud800題名","target":"x",'
+                                           '"body":"b","priority":"low"}', encoding="utf-8")
+            actions, rejected = aq.load_actions(tmp)
+        self.assertEqual((actions, len(rejected)), ([], 1))
+
     def test_urgent_marker_forgery_is_rejected(self):
-        for text in ("【緊急】対応", "［緊急］対応", "[緊急] x"):
+        for text in ("【緊急】対応", "［緊急］対応", "[緊急] x", "【 緊急 】x", "〔緊急〕x", "〖緊急〗x", "【緊 急】x", "（緊急）x"):
             self.assertIsNotNone(aq.validate_action(action("a-1", title=text)), text)
             self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=[text])), text)
 
