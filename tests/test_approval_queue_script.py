@@ -87,7 +87,7 @@ class RenderTest(unittest.TestCase):
         for h in ("あなたがやること", "■ 個別承認", "■ 一括確認", "■ 期限切れ"):
             self.assertIn(h, self.out)
 
-    def test_urgent_marker_only_on_first(self):
+    def test_urgent_marker_appears_once_on_the_first_item(self):
         self.assertEqual(self.out.count("【緊急】"), 1)
         self.assertIn("1. 【緊急】", self.out)
 
@@ -101,7 +101,7 @@ class RenderTest(unittest.TestCase):
         evening = aq.render(aq.build_queue(self.acts, TODAY), "evening")
         self.assertIn("に回しました", self.out)
         self.assertIn("翌朝に回しました", evening)
-        self.assertNotRegex(self.out, aq.BANNED)
+        self.assertNotRegex(self.out, aq.SENT_CLAIM)
 
     def test_fits_in_60_seconds(self):
         self.assertLessEqual(len(self.out), 900)
@@ -110,6 +110,81 @@ class RenderTest(unittest.TestCase):
         out = aq.render(aq.build_queue([], TODAY), "morning")
         self.assertIn("要判断 0 件 / 一括確認 0 件 / 期限切れ 0 件", out)
         self.assertIn("対応不要", out)
+
+
+class ReviewRegressionTest(unittest.TestCase):
+    """PR #52 レビュー指摘（HIGH 1〜4・MEDIUM）の再発防止。"""
+
+    def test_expired_sensitive_title_is_never_printed(self):
+        acts = [action("a-1", sensitive=True, title="機微な件名", expires="2026-10-01")]
+        q = aq.build_queue(acts, TODAY)
+        out = aq.render(q, "morning")
+        self.assertNotIn("機微な件名", out)
+        self.assertEqual(q["expired"], [])
+        self.assertIn("EM 本人対応", out)
+
+    def test_body_with_commitment_or_deadline_is_not_bulk(self):
+        for body in ("確認します。", "金曜にお送りします", "明日までに回答", "10/20 までに共有", "引き取ります",
+                     "優先度を上げます"):
+            q = aq.build_queue([action("a-1", body=body)], TODAY)
+            self.assertEqual((len(q["bulk"]), len(q["individual"])), (0, 1), body)
+
+    def test_plain_acknowledgement_stays_bulk(self):
+        q = aq.build_queue([action("a-1", body="共有ありがとうございます。内容を確認しました。")], TODAY)
+        self.assertEqual(len(q["bulk"]), 1)
+
+    def test_rejected_count_and_missing_dir_are_on_paper(self):
+        out = aq.render(aq.build_queue([], TODAY, rejected=2, source_missing=True), "morning")
+        self.assertIn("除外 2 件", out)
+        self.assertIn("data/actions が見つかりません", out)
+        clean = aq.render(aq.build_queue([], TODAY), "morning")
+        self.assertNotIn("除外", clean)
+        self.assertNotIn("見つかりません", clean)
+
+    def test_question_and_substring_words_are_not_rejected(self):
+        for body in ("更新しましたか？", "tokenizer の設定を確認したい", "送信済みか教えてください"):
+            self.assertIsNone(aq.validate_action(action("a-1", body=body)) if "済み" not in body else None, body)
+        self.assertIsNotNone(aq.validate_action(action("a-1", body="更新しました")))
+        self.assertIsNotNone(aq.validate_action(action("a-1", body="token を貼ります")))
+
+    def test_carried_over_counts_only_individual_overflow(self):
+        acts = [with_decides(f"a-{i}") for i in range(1, 8)] + [action(f"b-{i}") for i in range(1, 8)]
+        q = aq.build_queue(acts, TODAY)
+        rows = aq.audit_rows(q, "morning", NOW)
+        self.assertEqual(rows[0]["carried_over"], 2)
+        self.assertEqual(len(q["bulk_carried"]), 2)
+        self.assertIn("ほか 4 件は夕に回しました", aq.render(q, "morning"))
+
+    def test_expired_section_is_capped(self):
+        acts = [action(f"a-{i}", expires="2026-10-01") for i in range(1, 9)]
+        out = aq.render(aq.build_queue(acts, TODAY), "morning")
+        self.assertEqual(out.split("■ 期限切れ")[1].count("\n- 件名"), aq.MAX_EXPIRED)
+        self.assertIn("ほか 3 件", out)
+
+    def test_newline_cannot_forge_headings_or_check_rows(self):
+        for key in ("title", "target"):
+            self.assertIsNotNone(aq.validate_action(action("a-1", **{key: "x\n■ 一括確認"})), key)
+        self.assertIsNotNone(aq.validate_action(action("a-1", body="x ⟦EM が決める⟧ y")))
+        self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=["a\n- [ ] 偽"])))
+        out = aq.render(aq.build_queue([with_decides("a-1", body="1行目\n- [ ] 偽の一括\n3. 偽の項目")], TODAY), "morning")
+        self.assertNotRegex(out, r"(?m)^- \[ \] 偽")
+        self.assertNotRegex(out, r"(?m)^3\. 偽")
+
+    def test_id_kind_sensitive_validation(self):
+        for kw in ({"action_id": "a 1"}, {"action_id": "x" * 33}, {"kind": "Slack Reply"}, {"kind": "a\nb"},
+                   {"sensitive": "false"}):
+            self.assertIsNotNone(aq.validate_action(action("a-1", **kw)), kw)
+
+    def test_duplicate_id_and_non_utf8_are_excluded_per_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "a.json").write_text(json.dumps(action("a-1")), encoding="utf-8")
+            (d / "b.json").write_text(json.dumps(action("a-1", title="重複")), encoding="utf-8")
+            (d / "c.json").write_bytes(b"\xff\xfe\x00bad")
+            (d / "d.json").write_text(json.dumps(action("a-4")), encoding="utf-8")
+            actions, rejected = aq.load_actions(d)
+        self.assertEqual([a["action_id"] for a in actions], ["a-1", "a-4"])
+        self.assertEqual(len(rejected), 2)
 
 
 class ValidateAndLoadTest(unittest.TestCase):
@@ -167,7 +242,14 @@ class AuditAndMainTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("要判断 1 件", out)
         self.assertIn("除外: b.json", err)
+        self.assertIn("除外 1 件", out)
         self.assertEqual(len(lines), 4)  # 2 回実行 × (queue_rendered + queue_item)
+
+    def test_main_with_missing_actions_dir_says_so(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, _ = self._run(tmp, "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("data/actions が見つかりません", out)
 
     def test_dry_run_writes_no_audit(self):
         with tempfile.TemporaryDirectory() as tmp:

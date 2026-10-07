@@ -1,6 +1,6 @@
 # 新規コミットの検知基準と承認キュー出力テンプレ
 
-状態: 設計（emh-023）。根拠は [ADR 0001](../adr/0001-delegation-policy-approval-audit.md) の残論点と [05 §2](05-approval-and-audit.md)。判定語・しきい値は仮置きで、EM の使用感で調整する。サンプルは全て架空。L1（下書きまで）。
+状態: 設計（emh-023）＋モック試作（emh-041。生成スクリプトのみ。入力 `data/actions` を作る元は未実装）。根拠は [ADR 0001](../adr/0001-delegation-policy-approval-audit.md) の残論点と [05 §2](05-approval-and-audit.md)。判定語・しきい値は仮置きで、EM の使用感で調整する。サンプルは全て架空。L1（下書きまで）。
 
 ## 結論
 - 「新規コミット」＝ EM の名前で **期限・約束・割当・優先度の変更** を相手に示すこと。常に EM 本人が決める（L2 付与不可）
@@ -104,5 +104,6 @@
   - キューのサンプルが 60 秒で読める量に収まり、`tests/test_approval_queue.py` が通ること
 - **モック試作**（emh-041）: `scripts/approval_queue.py --slot morning|evening` が `data/actions/*.json`（1 ファイル 1 件）から上記の 1 枚を標準出力に出し、`queue_rendered` / `queue_item`（[26 §2](26-trial-review-metrics.md)）を `data/audit/` に本文なしで追記する。Jira / Slack へは書かない。`--dry-run` で追記を止める
   - 入力キー: 必須 `action_id` / `kind` / `title` / `target` / `body` / `priority`（high・medium・low）、任意 `due` / `expires` / `commit_stage`（none・A・B・C）/ `em_decides` / `sensitive`。不正な入力は除外して stderr に出す（fail-closed）
-  - 仮置き: 一括確認も最大 5 件（超過は翌回へ）。`【緊急】`＝優先度 high で期限が今日以前。同じ枠を 2 回出すと監査行も 2 回分たまる（冪等にしない）。検知（§1）は未実装のため `commit_stage` は入力の申告をそのまま使う
+  - 仮置き（[Q-031](open-questions.md)）: 一括確認も最大 5 件（超過は翌回へ。監査の `carried_over` は個別承認の超過のみ＝26 M3）。`【緊急】`＝優先度 high で期限が今日以前。同じ枠を 2 回出すと監査行も 2 回分たまる（冪等にしない）。検知（§1）は未実装のため `commit_stage` は入力の申告を使うが、一括確認は **fail-closed**（題名・本文に期限・約束・変更の語があれば個別承認へ。語の一覧は `COMMIT_WORDS`）
   - 通知・送信結果の照合は未実装。テストは `tests/test_approval_queue_script.py`
+  - 機微（`sensitive: true`）は期限切れでも先に分け、題名・本文を出さない。除外した入力は紙面に「除外 N 件」と出し、`data/actions` が無いときもその旨を出す。期限切れ欄は最大 5 件
