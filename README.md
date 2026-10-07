@@ -31,6 +31,24 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 
 `config/local.yaml` に会社固有値を書く（gitignore 済み）。秘密値は書かない。
 
+## 毎日の使い方
+
+秘書（Claude Code）に話しかけるのが入口。下のコマンドは秘書が実行する（自分で打ってもよい）。所要時間は EM が使う目安。初回は先に `python3 scripts/bootstrap.py`。
+以下は架空の1日。すべてローカル完結で、Slack / Jira / Confluence へは何も送らない（送信は EM 本人）。
+
+| いつ | 秘書に言う | 実行されるコマンド | EM の時間 | 出力の置き場 |
+|---|---|---|---|---|
+| 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/` |
+| Slack を貼った後 | 先に匿名化済みの構造化 JSON を用意（手順は `slack-to-candidates` の SKILL.md）。そのうえで「Slack の依頼を候補に」 | `python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/tasks/candidates.json` |
+| 返信案が要る | 「返信案を作って」 | `python3 scripts/make_draft.py slack-reply <input>.json --dry-run` → 外して保存 | 約2分/件 | `data/outputs/drafts/`（未送信。送るのは EM） |
+| 返答を反映 | 「採用 c-0001」「完了 t-0001」など | `python3 scripts/apply_reply.py "採用 c-0001" "完了 t-0001"`（`--dry-run` で確認、`--undo` で直前を戻す） | 約1分 | `data/tasks/tasks.json` |
+| 夕方 | 「夕方の締め」 | `python3 scripts/evening_wrapup.py` | 約1分 | 画面に1枚（読み取り専用） |
+| 金曜 | 「週次棚卸し」 | `python3 scripts/weekly_review.py`（先回りの放置要約は `python3 scripts/proactive_scan.py --digest`） | 約3分 | 画面に1枚（読み取り専用） |
+
+- 計画・締め・棚卸しは、返答を定型語にして `apply_reply.py` で反映する（書式は [24-reply-apply.md](docs/design/24-reply-apply.md)）
+- 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan`）
+- 実データは `data/`（gitignore）に置く。サンプルで試すだけなら各 SKILL.md の「試す」を実行
+
 ## ディレクトリ
 
 ```
