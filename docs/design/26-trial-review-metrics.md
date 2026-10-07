@@ -38,7 +38,7 @@
 | M7 | Q-029 判断依頼の効き（**推定版のみ**） | `defer` 2 回目の日（[25](25-evening-wrapup.md) で判断依頼が出る条件に入った日）を「出たはずの日」とみなし、翌日末までに同じタスクの `history` に `done` / `drop` があった割合（`due` 変更は返答に数えない。先送りは判断の回避でも起こり、答えたとは言えないため） | tasks の `history`（`at`）。**判断依頼が実際に表示された日は、どこにも記録されない**（夕方レポートは何も書き込まない） | ○（推定のみ） | 半数未満 → 判断依頼の書き方・件数を見直す候補（原因は問う）。**限界**: ① 表示日は推定 ② `drop` は返答の定型語 5 種に無く（[24](24-reply-apply.md) で未決）、EM の手編集でしか `history` に残らない ③ 「分割」は `history` で判別できない。表示 id を記録する実装は別項目 |
 
 - M1・M5 は接続前は**未計測**。試用開始時に数えられるのは M6 と M7（推定版）。M2〜M4 は承認キューと照合の実装後
-- `queue_rendered` / `queue_item` は**この文書で書式だけ決める**（承認キューは `scripts/approval_queue.py` にモック試作済み。照合側は未実装）。本文・実名は含めない。`kind` の語彙は [12](12-secretary-job-list.md) / [21](21-approval-queue.md) の下書き種別（`slack_reply` / `jira_comment` / `minutes` / `retro_agenda` 等）で、未実装のため実装時に確定する。`queue_item` は `result` を持たず、`action_id` で `em_reviewed` と突合する（結果を二重に持たない）。[05 §3](05-approval-and-audit.md) の `event` 一覧にも追記した:
+- `queue_rendered` / `queue_item` は**この文書で書式だけ決める**（承認キューは `scripts/approval_queue.py` にモック試作済み。照合側は未実装）。本文・実名は含めない。`kind` は下書き種別を表す小文字英字と `_` の自由語（実装は 32 字以内の形式だけ検査し、語彙は固定していない。例: `slack_reply` / `jira_comment` / `minutes` / `retro_agenda`。[12](12-secretary-job-list.md) / [21](21-approval-queue.md) 参照）。一括確認（`bucket: bulk`）になるのは `minutes` と `retro_agenda` だけ。`queue_item` は `result` を持たず、`action_id` で `em_reviewed` と突合する（結果を二重に持たない）。[05 §3](05-approval-and-audit.md) の `event` 一覧にも追記した:
 
 ```json
 {"ts":"2026-01-01T09:00:00+09:00","event":"queue_rendered","slot":"morning","individual":5,"bulk":2,"carried_over":1}

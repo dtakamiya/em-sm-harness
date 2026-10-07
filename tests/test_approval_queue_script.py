@@ -16,7 +16,7 @@ NOW = datetime(2026, 10, 5, 9, 0, tzinfo=timezone(timedelta(hours=9)))
 
 
 def action(aid, **kw):
-    base = {"action_id": aid, "kind": "slack_reply", "title": f"件名 {aid}", "target": "example-channel",
+    base = {"action_id": aid, "kind": "minutes", "title": f"件名 {aid}", "target": "example-channel",
             "body": "共有ありがとうございます。", "priority": "medium"}
     return {**base, **kw}
 
@@ -99,8 +99,10 @@ class RenderTest(unittest.TestCase):
 
     def test_next_slot_label_and_no_sent_claim(self):
         evening = aq.render(aq.build_queue(self.acts, TODAY), "evening")
-        self.assertIn("に回しました", self.out)
-        self.assertIn("翌朝に回しました", evening)
+        self.assertNotIn("に回しました", self.out)  # 持ち越し 0 件の行は出さない
+        acts = [with_decides(f"a-{i}") for i in range(1, 7)]
+        self.assertIn("ほか 1 件は夕に回しました", aq.render(aq.build_queue(acts, TODAY), "morning"))
+        self.assertIn("翌朝に回しました", aq.render(aq.build_queue(acts, TODAY), "evening"))
         self.assertNotRegex(self.out, aq.SENT_CLAIM)
 
     def test_fits_in_60_seconds(self):
@@ -125,9 +127,62 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_body_with_commitment_or_deadline_is_not_bulk(self):
         for body in ("確認します。", "金曜にお送りします", "明日までに回答", "10/20 までに共有", "引き取ります",
-                     "優先度を上げます"):
+                     "優先度を上げます", "承知しました", "やります", "送ります", "引き受けます", "間に合わせます",
+                     "3日で戻します", "月末の予定です", "来週お願いします"):
             q = aq.build_queue([action("a-1", body=body)], TODAY)
             self.assertEqual((len(q["bulk"]), len(q["individual"])), (0, 1), body)
+
+    def test_bulk_is_allowlist_by_kind(self):
+        for kind in ("slack_reply", "jira_comment", "unknown_kind"):
+            q = aq.build_queue([action("a-1", kind=kind, body="内容を確認しました。")], TODAY)
+            self.assertEqual((len(q["bulk"]), len(q["individual"])), (0, 1), kind)
+        for kind in aq.BULK_KINDS:
+            q = aq.build_queue([action("a-1", kind=kind)], TODAY)
+            self.assertEqual(len(q["bulk"]), 1, kind)
+
+    def test_headline_counts_include_personal_and_rejected_and_never_idle_when_rejected(self):
+        q = aq.build_queue([action("p-1", sensitive=True)], TODAY, rejected=2)
+        out = aq.render(q, "morning")
+        self.assertIn("本人対応 1 件", out.split("\n")[1])
+        self.assertIn("除外 2 件", out.split("\n")[1])
+        self.assertNotIn("対応不要", out)
+        only_rejected = aq.render(aq.build_queue([], TODAY, rejected=1), "morning")
+        self.assertNotIn("対応不要", only_rejected)
+        self.assertIn("除外 1 件の入力を直す", only_rejected)
+        missing = aq.render(aq.build_queue([], TODAY, source_missing=True), "morning")
+        self.assertNotIn("対応不要", missing)
+
+    def test_personal_section_is_capped(self):
+        acts = [action(f"p-{i}", sensitive=True) for i in range(1, 9)]
+        out = aq.render(aq.build_queue(acts, TODAY), "morning")
+        self.assertEqual(out.split("■ EM 本人対応")[1].count("\n- minutes"), aq.MAX_PERSONAL)
+        self.assertIn("ほか 3 件", out.split("■ EM 本人対応")[1])
+
+    def test_input_limits(self):
+        for kw in ({"title": "あ" * (aq.MAX_TITLE_CHARS + 1)}, {"target": "x" * (aq.MAX_TARGET_CHARS + 1)},
+                   {"body": "あ" * (aq.MAX_BODY_CHARS + 1)}, {"em_decides": ["a"] * (aq.MAX_DECIDES + 1)},
+                   {"em_decides": ["あ" * (aq.MAX_DECIDE_CHARS + 1)]}):
+            self.assertIsNotNone(aq.validate_action(action("a-1", **kw)), list(kw))
+
+    def test_worst_case_page_fits_reading_budget(self):
+        worst = dict(title="あ" * aq.MAX_TITLE_CHARS, target="x" * aq.MAX_TARGET_CHARS, body="あ" * aq.MAX_BODY_CHARS,
+                     em_decides=["あ" * aq.MAX_DECIDE_CHARS] * aq.MAX_DECIDES, commit_stage="A", due="2026-10-05",
+                     priority="high")
+        acts = ([action(f"i-{i}", **worst) for i in range(9)] + [action(f"b-{i}", title="あ" * aq.MAX_TITLE_CHARS) for i in range(9)]
+                + [action(f"e-{i}", title="あ" * aq.MAX_TITLE_CHARS, expires="2026-10-01") for i in range(9)]
+                + [action(f"p-{i}", sensitive=True) for i in range(9)])
+        out = aq.render(aq.build_queue(acts, TODAY, rejected=3), "morning")
+        self.assertLessEqual(len(out), aq.MAX_RENDER_CHARS)
+
+    def test_secret_like_strings_are_rejected(self):
+        for body in ("Authorization: Bearer abc.def", "ghp_abc123", "password: x", "www.example.org を見る",
+                     "someone@" + "real-company.co.jp へ", "xox" + "b-1234567890-abc", "送っておきました", "更新済み"):
+            self.assertIsNotNone(aq.validate_action(action("a-1", body=body)), body)
+        self.assertIsNone(aq.validate_action(action("a-1", body="someone@example.com は架空")))
+
+    def test_extra_local_patterns_are_applied(self):
+        import re
+        self.assertIsNotNone(aq.validate_action(action("a-1", body="社内用語ZZZ"), [("local", re.compile("ZZZ"))]))
 
     def test_plain_acknowledgement_stays_bulk(self):
         q = aq.build_queue([action("a-1", body="共有ありがとうございます。内容を確認しました。")], TODAY)
@@ -143,7 +198,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_question_and_substring_words_are_not_rejected(self):
         for body in ("更新しましたか？", "tokenizer の設定を確認したい", "送信済みか教えてください"):
-            self.assertIsNone(aq.validate_action(action("a-1", body=body)) if "済み" not in body else None, body)
+            self.assertIsNone(aq.validate_action(action("a-1", body=body)), body)
         self.assertIsNotNone(aq.validate_action(action("a-1", body="更新しました")))
         self.assertIsNotNone(aq.validate_action(action("a-1", body="token を貼ります")))
 
@@ -250,6 +305,11 @@ class AuditAndMainTest(unittest.TestCase):
             code, out, _ = self._run(tmp, "--dry-run")
         self.assertEqual(code, 0)
         self.assertIn("data/actions が見つかりません", out)
+
+    def test_missing_actions_dir_writes_no_audit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run(tmp)
+            self.assertFalse(Path(tmp, "audit").exists())
 
     def test_dry_run_writes_no_audit(self):
         with tempfile.TemporaryDirectory() as tmp:

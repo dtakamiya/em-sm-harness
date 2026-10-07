@@ -15,6 +15,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_no_leak import INTERNAL_RES, TOKEN_RES, load_local_patterns  # noqa: E402
 from make_draft import BANNER, MARKERS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,18 +31,29 @@ STAGES = ("none", "A", "B", "C")
 NEXT_SLOT = {"morning": "夕", "evening": "翌朝"}
 SLOT_LABEL = {"morning": "朝", "evening": "夕"}
 MAX_EXPIRED = 5
+MAX_PERSONAL = 5
+MAX_TITLE_CHARS = 50
+MAX_TARGET_CHARS = 30
+MAX_BODY_CHARS = 100
+MAX_DECIDES = 2
+MAX_DECIDE_CHARS = 60
+MAX_RENDER_CHARS = 3000  # 上限いっぱいの入力でも超えない紙面の長さ（最悪ケースの天井。典型は 900 字前後。60 秒で読めるかは 21 §3 で実測して調整）
+# 一括確認に入れてよい種別の許可リスト（定型の下書きだけ）。これ以外は個別承認（21 §2）
+BULK_KINDS = ("minutes", "retro_agenda")
 ID_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 KIND_RE = re.compile(r"[a-z_]{1,32}")
 # 部分一致の誤除外を避ける: 「更新しましたか？」「tokenizer」は通し、断定の送信済み表現・URL・トークンだけ弾く
-SENT_CLAIM = re.compile(r"(送信|更新|投稿|送り)(しました|済み)(?![かの？?])|送りました")
+SENT_CLAIM = re.compile(r"(送信|更新|投稿|送り)(しました|済み)(?![かの？?])|送りました|(送|投稿|更新|返信)(っ|し)ておきました")
 EVAL_WORDS = re.compile(r"遅い人|やる気がない|低パフォーマー")
-SENSITIVE = re.compile(r"https?://|xox[a-z]-|(?<![A-Za-z])token(?![A-Za-z])", re.I)
+SENSITIVE = re.compile(r"https?://|www\.|xox[a-z]-|gh[pousr]_\w+|Bearer\s+\S+|password\s*[:=]|(?<![A-Za-z])token(?![A-Za-z])", re.I)
 # 一括確認は fail-closed: 題名にも本文にも A 段（期限）・B 段（約束）・C 段（変更）らしき語があれば個別承認へ回す（21 §1・§2）
 COMMIT_WORDS = re.compile(
-    r"\d{1,2}/\d{1,2}|\d{4}-\d{2}-\d{2}|\d{1,2}月\d{1,2}日|\d{1,2}:\d{2}|[月火水木金土日]曜|今日中|今週|来週|来月|明日|明後日|本日"
-    r"|EOD|\d+ ?日以内|までに|期限|期日|締切|至急|お願いします"
-    r"|(確認|対応|連絡|調整|検討|共有|返信|回答)(します|いたします|させていただきます)|引き取|やっておき|お約束"
-    r"|(替え|上げ|下げ|外し|変更し|延期し)ます")
+    r"\d{1,2}/\d{1,2}|\d{4}-\d{2}-\d{2}|\d{1,2}月\d{1,2}日|\d{1,2}:\d{2}|[月火水木金土日]曜|今日中|今週|来週|来月|月末|月初|明日|明後日|本日"
+    r"|EOD|\d+ ?(日|週間|営業日)(以内|で|後)|までに|間に合|期限|期日|締切|至急|予定|見込み"
+    r"|お願い|承知|了解|引き受け|引き取|やっておき|お約束"
+    r"|(確認|対応|連絡|調整|検討|共有|返信|回答|報告)(します|いたします|致します|させていただきます)"
+    r"|(出し|直し|進め|やり|おき|行い|致し|いたし|させていただき)ます"
+    r"|(替え|上げ|下げ|外し|変更し|延期し|送り|届け|伝え|出し|入れ|報告し|連絡し)ます|お送り|お届け|ご連絡|ご報告|ておきます")
 
 
 def _day(value):
@@ -56,7 +68,7 @@ def _one_line(label, text):
     return None
 
 
-def validate_action(raw):
+def validate_action(raw, extra_patterns=()):
     """不正なら理由（str）、正常なら None を返す。"""
     if not isinstance(raw, dict):
         return "JSON オブジェクトではありません"
@@ -81,6 +93,11 @@ def validate_action(raw):
     decides = raw.get("em_decides", [])
     if not isinstance(decides, list) or not all(isinstance(d, str) and d.strip() for d in decides):
         return "em_decides は空でない文字列の配列にしてください"
+    if len(decides) > MAX_DECIDES or any(len(d) > MAX_DECIDE_CHARS for d in decides):
+        return f"em_decides は {MAX_DECIDES} 件・各 {MAX_DECIDE_CHARS} 字以内にしてください（60 秒で読める量）"
+    for key, limit in (("title", MAX_TITLE_CHARS), ("target", MAX_TARGET_CHARS), ("body", MAX_BODY_CHARS)):
+        if len(raw[key]) > limit:
+            return f"{key} は {limit} 字以内にしてください（60 秒で読める量）"
     for label, text in [("title", raw["title"]), ("target", raw["target"]),
                         *[("em_decides", d) for d in decides]]:
         reason = _one_line(label, text)
@@ -91,10 +108,12 @@ def validate_action(raw):
     text = " ".join([raw["title"], raw["target"], raw["body"], *decides])
     if SENSITIVE.search(text) or SENT_CLAIM.search(text) or EVAL_WORDS.search(text):
         return "URL・トークンらしき文字列、または送信済み表現・評価語があります"
+    if any(rx.search(text) for _, rx in (*TOKEN_RES, *INTERNAL_RES, *extra_patterns)):
+        return "秘密値・実ドメイン・社内固有情報らしき文字列があります（check_no_leak と同じ検査）"
     return None
 
 
-def load_actions(actions_dir):
+def load_actions(actions_dir, extra_patterns=()):
     """(正常な action のリスト, 除外理由のリスト)。1 件の不備で全体を止めない。重複 action_id は後のものを除外する。"""
     actions, rejected, seen = [], [], set()
     for path in sorted(Path(actions_dir).glob("*.json")):
@@ -106,7 +125,7 @@ def load_actions(actions_dir):
         except (UnicodeDecodeError, OSError) as exc:
             rejected.append(f"{path.name}: 読めません（{type(exc).__name__}）")
             continue
-        reason = validate_action(raw)
+        reason = validate_action(raw, extra_patterns)
         if not reason and raw["action_id"] in seen:
             reason = f"action_id {raw['action_id']} が重複しています"
         if reason:
@@ -137,7 +156,8 @@ def _sort_key(action, today):
 
 def _is_bulk(action):
     text = f"{action['title']} {action['body']}"
-    return (action.get("commit_stage", "none") == "none" and not action.get("em_decides")
+    return (action["kind"] in BULK_KINDS and action.get("commit_stage", "none") == "none"
+            and not action.get("em_decides")
             and not COMMIT_WORDS.search(text))
 
 
@@ -178,28 +198,48 @@ def _notes(queue):
     return notes
 
 
+def _summary(queue):
+    ind, bulk, exp, personal = queue["individual"], queue["bulk"], queue["expired"], queue["personal"]
+    minutes = max(1, math.ceil(len(ind) * MINUTES_PER_INDIVIDUAL + len(bulk) * MINUTES_PER_BULK))
+    parts = [f"要判断 {len(ind)} 件", f"一括確認 {len(bulk)} 件"]
+    parts += [f"本人対応 {len(personal)} 件"] if personal else []
+    parts += [f"期限切れ {len(exp)} 件"]
+    parts += [f"除外 {queue['rejected']} 件"] if queue["rejected"] else []
+    todo = []
+    if ind:
+        todo.append(f"{'1' if len(ind) == 1 else f'1〜{len(ind)}'} の ⟦EM が決める⟧ 欄を埋めて送る")
+    if bulk:
+        todo.append("一括確認の項目を見る")
+    if personal:
+        todo.append(f"本人対応 {len(personal)} 件を自分で扱う")
+    if queue["rejected"]:
+        todo.append(f"除外 {queue['rejected']} 件の入力を直す")
+    if queue["source_missing"]:
+        todo.append("data/actions の場所を確認する")
+    return f"結論: {' / '.join(parts)}（目安 {minutes} 分・仮置き）", f"あなたがやること: {'、'.join(todo) or '対応不要'}"
+
+
 def render(queue, slot):
     ind, bulk, exp = queue["individual"], queue["bulk"], queue["expired"]
     carried = len(queue["carried"]) + len(queue["bulk_carried"])
-    minutes = max(1, math.ceil(len(ind) * MINUTES_PER_INDIVIDUAL + len(bulk) * MINUTES_PER_BULK))
-    span = "1" if len(ind) == 1 else f"1〜{len(ind)}"
-    todo = f"{span} の ⟦EM が決める⟧ 欄を埋めて送る" if ind else "一括確認の項目を見る" if bulk else "対応不要"
-    out = [f"{BANNER}承認キュー {queue['today'].isoformat()} {SLOT_LABEL[slot]}",
-           f"結論: 要判断 {len(ind)} 件 / 一括確認 {len(bulk)} 件 / 期限切れ {len(exp)} 件（目安 {minutes} 分・仮置き）",
-           *_notes(queue),
-           f"あなたがやること: {todo}", "", "■ 個別承認（優先度順・最大 5 件）"]
+    head, todo = _summary(queue)
+    out = [f"{BANNER}承認キュー {queue['today'].isoformat()} {SLOT_LABEL[slot]}", head, *_notes(queue), todo,
+           "", "■ 個別承認（優先度順・最大 5 件）"]
     for n, a in enumerate(ind, 1):
         out += _item(n, a, a["action_id"] in queue["urgent_ids"])
     out += ["", "■ 一括確認（低リスク定型）"]
     out += [f"- [ ] {a['title']}（{a['kind']}）" for a in bulk]
-    out.append(f"- ほか {carried} 件は{NEXT_SLOT[slot]}に回しました")
-    out += ["", "■ 期限切れ（自動で下書きから外しました）"]
+    if carried:
+        out.append(f"- ほか {carried} 件は{NEXT_SLOT[slot]}に回しました")
+    out += ["", "■ 期限切れ（今回のキューから外しました。下書きは data/actions に残っています）"]
     out += [f"- {a['title']}（{a['expires']}）" for a in exp[:MAX_EXPIRED]]
     if len(exp) > MAX_EXPIRED:
         out.append(f"- ほか {len(exp) - MAX_EXPIRED} 件")
     if queue["personal"]:
         out += ["", "■ EM 本人対応（本文なし）"]
-        out += [f"- {a['kind']} {a['action_id']}" for a in queue["personal"]]
+        out += [f"- {a['kind']} {a['action_id']}" for a in queue["personal"][:MAX_PERSONAL]]
+        if len(queue["personal"]) > MAX_PERSONAL:
+            out.append(f"- ほか {len(queue['personal']) - MAX_PERSONAL} 件")
     return "\n".join(out) + "\n"
 
 
@@ -230,7 +270,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     now = args.now or datetime.now().astimezone()
     try:
-        actions, rejected = load_actions(args.actions_dir)
+        actions, rejected = load_actions(args.actions_dir, load_local_patterns())
     except OSError as exc:
         print(f"actions を読めません: {exc}", file=sys.stderr)
         return 1
@@ -238,7 +278,7 @@ def main(argv=None):
         print(f"除外: {line}", file=sys.stderr)
     queue = build_queue(actions, now.date(), len(rejected), not args.actions_dir.is_dir())
     sys.stdout.write(render(queue, args.slot))
-    if not args.dry_run:
+    if not args.dry_run and not queue["source_missing"]:  # 置き場が無いときは「0 件で出した」記録を残さない（M3・M4 を汚さない）
         append_audit(args.audit_dir, now, audit_rows(queue, args.slot, now))
     return 0
 
