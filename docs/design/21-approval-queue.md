@@ -102,3 +102,7 @@
 - **受け入れ基準**
   - 検知は **実装がなく目視確認のみ**。§1 の判定例 7 件は `tests/fixtures/approval-queue/detection-cases.json` の期待値（A/B/C/非コミット）と本文の表が一致することをテストで照合する（将来の検知実装の期待値としても使う）。検知そのものの精度はこの PR では検証しない
   - キューのサンプルが 60 秒で読める量に収まり、`tests/test_approval_queue.py` が通ること
+- **モック試作**（emh-041）: `scripts/approval_queue.py --slot morning|evening` が `data/actions/*.json`（1 ファイル 1 件）から上記の 1 枚を標準出力に出し、`queue_rendered` / `queue_item`（[26 §2](26-trial-review-metrics.md)）を `data/audit/` に本文なしで追記する。Jira / Slack へは書かない。`--dry-run` で追記を止める
+  - 入力キー: 必須 `action_id` / `kind` / `title` / `target` / `body` / `priority`（high・medium・low）、任意 `due` / `expires` / `commit_stage`（none・A・B・C）/ `em_decides` / `sensitive`。不正な入力は除外して stderr に出す（fail-closed）
+  - 仮置き: 一括確認も最大 5 件（超過は翌回へ）。`【緊急】`＝優先度 high で期限が今日以前。同じ枠を 2 回出すと監査行も 2 回分たまる（冪等にしない）。検知（§1）は未実装のため `commit_stage` は入力の申告をそのまま使う
+  - 通知・送信結果の照合は未実装。テストは `tests/test_approval_queue_script.py`
