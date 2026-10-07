@@ -225,6 +225,45 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotRegex(out, r"(?m)^- \[ \] 偽")
         self.assertNotRegex(out, r"(?m)^3\. 偽")
 
+    def test_control_and_format_characters_are_rejected_in_every_field(self):
+        bad = {"cr": "x\r- [ ] 偽の一括", "esc": "\x1b[2J\x1b[H偽", "ls": "a\u2028b", "ps": "a\u2029b",
+               "rlo": "a\u202eb", "bs": "a\x08b", "zwsp": "a\u200bb", "nl": "a\nb"}
+        for name, text in bad.items():
+            for key in ("title", "target", "body"):
+                self.assertIsNotNone(aq.validate_action(action("a-1", **{key: text})), f"{key}:{name}")
+            self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=[text])), f"em_decides:{name}")
+
+    def test_banner_erasing_title_never_reaches_the_page(self):
+        raw = action("a-1", title="\x1b[2J\x1b[1;1H偽の画面")
+        self.assertIsNotNone(aq.validate_action(raw))
+        self.assertIsNotNone(aq.validate_action(action("a-1", body="x\r- [ ] 偽の一括")))
+
+    def test_urgent_marker_forgery_is_rejected(self):
+        for text in ("【緊急】対応", "［緊急］対応", "[緊急] x"):
+            self.assertIsNotNone(aq.validate_action(action("a-1", title=text)), text)
+            self.assertIsNotNone(aq.validate_action(action("a-1", em_decides=[text])), text)
+
+    def test_falsy_or_non_string_dates_are_rejected(self):
+        for key in ("due", "expires"):
+            for bad in (0, [], False, "", {}, 20261005):
+                self.assertIsNotNone(aq.validate_action(action("a-1", **{key: bad})), f"{key}={bad!r}")
+            self.assertIsNone(aq.validate_action(action("a-1", **{key: None})))
+
+    def test_twelve_missed_commitment_phrases_are_not_bulk(self):
+        bodies = ("担当は田中に変更", "私が対応する", "延期", "優先度を高にする", "１０／２０に出す", "あした出す",
+                  "ASAP", "納期は来月", "やっときます", "引き継ぐ", "対応いたしました", "次回に回す")
+        self.assertEqual(len(bodies), 12)
+        for body in bodies:
+            q = aq.build_queue([action("a-1", body=body)], TODAY)
+            self.assertEqual((len(q["bulk"]), len(q["individual"])), (0, 1), body)
+
+    def test_urgent_overflow_is_on_the_headline(self):
+        acts = [with_decides(f"u-{i}", priority="high", due="2026-10-04") for i in range(1, 8)]
+        q = aq.build_queue(acts, TODAY)
+        self.assertEqual(q["urgent_carried"], 2)
+        self.assertIn("緊急ほか 2 件", aq.render(q, "morning").split("\n")[1])
+        self.assertNotIn("緊急ほか", aq.render(aq.build_queue(acts[:5], TODAY), "morning"))
+
     def test_id_kind_sensitive_validation(self):
         for kw in ({"action_id": "a 1"}, {"action_id": "x" * 33}, {"kind": "Slack Reply"}, {"kind": "a\nb"},
                    {"sensitive": "false"}):

@@ -11,6 +11,7 @@ import json
 import math
 import re
 import sys
+import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 
@@ -42,6 +43,9 @@ MAX_RENDER_CHARS = 3000  # 上限いっぱいの入力でも超えない紙面�
 BULK_KINDS = ("minutes", "retro_agenda")
 ID_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 KIND_RE = re.compile(r"[a-z_]{1,32}")
+# 制御文字（Cc）・書式制御（Cf: U+202E など）・行/段落区切り（Zl・Zp）は紙面の偽装に使えるので全項目で拒否する
+FORBIDDEN_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
+URGENT_FORGERY = re.compile(r"[【\[]緊急[】\]]")
 # 部分一致の誤除外を避ける: 「更新しましたか？」「tokenizer」は通し、断定の送信済み表現・URL・トークンだけ弾く
 SENT_CLAIM = re.compile(r"(送信|更新|投稿|送り)(しました|済み)(?![かの？?])|送りました|(送|投稿|更新|返信)(っ|し)ておきました")
 EVAL_WORDS = re.compile(r"遅い人|やる気がない|低パフォーマー")
@@ -50,21 +54,43 @@ SENSITIVE = re.compile(r"https?://|www\.|xox[a-z]-|gh[pousr]_\w+|Bearer\s+\S+|pa
 COMMIT_WORDS = re.compile(
     r"\d{1,2}/\d{1,2}|\d{4}-\d{2}-\d{2}|\d{1,2}月\d{1,2}日|\d{1,2}:\d{2}|[月火水木金土日]曜|今日中|今週|来週|来月|月末|月初|明日|明後日|本日"
     r"|EOD|\d+ ?(日|週間|営業日)(以内|で|後)|までに|間に合|期限|期日|締切|至急|予定|見込み"
-    r"|お願い|承知|了解|引き受け|引き取|やっておき|お約束"
+    r"|お願い|承知|了解|引き受け|引き取|やっておき|やっとき|やっとく|お約束"
+    r"|割り?当|担当|変更|延期|優先度|にする|にします|ASAP|納期|あした|あす|引き継|いたしました|致しました|回す|出す|対応する"
     r"|(確認|対応|連絡|調整|検討|共有|返信|回答|報告)(します|いたします|致します|させていただきます)"
     r"|(出し|直し|進め|やり|おき|行い|致し|いたし|させていただき)ます"
-    r"|(替え|上げ|下げ|外し|変更し|延期し|送り|届け|伝え|出し|入れ|報告し|連絡し)ます|お送り|お届け|ご連絡|ご報告|ておきます")
+    r"|(替え|上げ|下げ|外し|変更し|延期し|送り|届け|伝え|出し|入れ|報告し|連絡し)ます|お送り|お届け|ご連絡|ご報告|ておきます",
+    re.I)  # 否定語リスト（denylist）方式のため漏れは残る。判定前に NFKC 正規化して全角・半角の揺れを吸収する
 
 
 def _day(value):
     return date.fromisoformat(value) if value else None
 
 
-def _one_line(label, text):
-    if "\n" in text or "\r" in text:
-        return f"{label} に改行は使えません"
-    if any(m in text for m in MARKERS):
+def _norm(text):
+    return unicodedata.normalize("NFKC", text)
+
+
+def _check_field(label, text):
+    """全項目共通: 制御文字・見出しの偽装・【緊急】の偽装を拒否（1 行に限る）。"""
+    if any(unicodedata.category(ch) in FORBIDDEN_CATEGORIES for ch in text):
+        return f"{label} に制御文字・改行・書式制御文字は使えません（1 行にしてください）"
+    norm = _norm(text)
+    if any(m in text or m in norm for m in MARKERS):
         return f"{label} に型の見出し用の文字列（■ ⟦ ⟧ 出典: 等）は使えません"
+    if URGENT_FORGERY.search(norm):
+        return f"{label} に【緊急】は書けません（緊急は優先度と期限から自動で付きます）"
+    return None
+
+
+def _check_date(key, value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return f"{key} は YYYY-MM-DD の文字列か省略にしてください"
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return f"{key} は YYYY-MM-DD にしてください"
     return None
 
 
@@ -86,10 +112,9 @@ def validate_action(raw, extra_patterns=()):
     if not isinstance(raw.get("sensitive", False), bool):
         return "sensitive は true / false にしてください"
     for key in ("due", "expires"):
-        try:
-            _day(raw.get(key))
-        except (TypeError, ValueError):
-            return f"{key} は YYYY-MM-DD にしてください"
+        reason = _check_date(key, raw.get(key))
+        if reason:
+            return reason
     decides = raw.get("em_decides", [])
     if not isinstance(decides, list) or not all(isinstance(d, str) and d.strip() for d in decides):
         return "em_decides は空でない文字列の配列にしてください"
@@ -98,14 +123,12 @@ def validate_action(raw, extra_patterns=()):
     for key, limit in (("title", MAX_TITLE_CHARS), ("target", MAX_TARGET_CHARS), ("body", MAX_BODY_CHARS)):
         if len(raw[key]) > limit:
             return f"{key} は {limit} 字以内にしてください（60 秒で読める量）"
-    for label, text in [("title", raw["title"]), ("target", raw["target"]),
+    for label, text in [("title", raw["title"]), ("target", raw["target"]), ("body", raw["body"]),
                         *[("em_decides", d) for d in decides]]:
-        reason = _one_line(label, text)
+        reason = _check_field(label, text)
         if reason:
             return reason
-    if any(m in raw["body"] for m in MARKERS):
-        return "body に型の見出し用の文字列（■ ⟦ ⟧ 出典: 等）は使えません"
-    text = " ".join([raw["title"], raw["target"], raw["body"], *decides])
+    text = _norm(" ".join([raw["title"], raw["target"], raw["body"], *decides]))
     if SENSITIVE.search(text) or SENT_CLAIM.search(text) or EVAL_WORDS.search(text):
         return "URL・トークンらしき文字列、または送信済み表現・評価語があります"
     if any(rx.search(text) for _, rx in (*TOKEN_RES, *INTERNAL_RES, *extra_patterns)):
@@ -155,7 +178,7 @@ def _sort_key(action, today):
 
 
 def _is_bulk(action):
-    text = f"{action['title']} {action['body']}"
+    text = _norm(f"{action['title']} {action['body']}")
     return (action["kind"] in BULK_KINDS and action.get("commit_stage", "none") == "none"
             and not action.get("em_decides")
             and not COMMIT_WORDS.search(text))
@@ -175,6 +198,7 @@ def build_queue(actions, today, rejected=0, source_missing=False):
         "today": today, "individual": individual, "bulk": bulk, "expired": expired, "personal": personal,
         "carried": individual_all[MAX_INDIVIDUAL:],  # 26 M3: 個別承認の超過のみ
         "bulk_carried": bulk_all[MAX_BULK:],
+        "urgent_carried": sum(_is_urgent(a, today) for a in individual_all[MAX_INDIVIDUAL:]),
         "urgent_ids": {a["action_id"] for a in individual if _is_urgent(a, today)},
         "rejected": rejected, "source_missing": source_missing,
     }
@@ -203,6 +227,7 @@ def _summary(queue):
     minutes = max(1, math.ceil(len(ind) * MINUTES_PER_INDIVIDUAL + len(bulk) * MINUTES_PER_BULK))
     parts = [f"要判断 {len(ind)} 件", f"一括確認 {len(bulk)} 件"]
     parts += [f"本人対応 {len(personal)} 件"] if personal else []
+    parts += [f"緊急ほか {queue['urgent_carried']} 件（枠超過）"] if queue["urgent_carried"] else []
     parts += [f"期限切れ {len(exp)} 件"]
     parts += [f"除外 {queue['rejected']} 件"] if queue["rejected"] else []
     todo = []
