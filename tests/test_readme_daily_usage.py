@@ -25,10 +25,23 @@ class ReadmeDailyUsageTest(unittest.TestCase):
         for name in scripts:
             self.assertTrue((ROOT / "scripts" / name).is_file(), name)
 
-    def test_every_flag_is_defined_in_some_script(self):
-        sources = "".join(p.read_text(encoding="utf-8") for p in (ROOT / "scripts").glob("*.py"))
-        for flag in set(FLAG_RE.findall(self.body)):
-            self.assertIn(f'"{flag}"', sources, flag)
+    def test_flags_exist_in_the_script_on_the_same_line(self):
+        checked = 0
+        for line in self.body.splitlines():
+            # 1行=1表の行。各 `python3 scripts/X.py ...` の断片ごとに、そのスクリプト内のフラグだけを照合する
+            for script, args in re.findall(r"python3 scripts/([a-z_]+\.py)([^`]*)`", line):
+                source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+                for flag in FLAG_RE.findall(args):
+                    self.assertIn(f'"{flag}"', source, f"{script} に {flag} がない")
+                    checked += 1
+            # 「→ 問題なければ `--dry-run` を外す」のような後続のフラグは、行内の直前のスクリプトに対して見る
+            for flag in FLAG_RE.findall(line):
+                scripts = re.findall(r"scripts/([a-z_]+\.py)", line)
+                self.assertTrue(
+                    any(f'"{flag}"' in (ROOT / "scripts" / sc).read_text(encoding="utf-8") for sc in scripts),
+                    f"{flag} を持つスクリプトがこの行にない",
+                )
+        self.assertGreater(checked, 0)
 
     def test_all_daily_skills_are_listed_and_exist(self):
         for name in DAILY_SKILLS:

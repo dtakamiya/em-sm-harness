@@ -39,7 +39,7 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 | いつ | 秘書に言う | 実行されるコマンド | EM の時間 | 出力の置き場 |
 |---|---|---|---|---|
 | 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/` |
-| Slack を貼った後 | 「Slack の依頼を候補に」 | `python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/tasks/candidates.json` |
+| Slack を貼った後 | 先に匿名化済みの構造化 JSON を用意（手順は `slack-to-candidates` の SKILL.md）。そのうえで「Slack の依頼を候補に」 | `python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/tasks/candidates.json` |
 | 返信案が要る | 「返信案を作って」 | `python3 scripts/make_draft.py slack-reply <input>.json --dry-run` → 外して保存 | 約2分/件 | `data/outputs/drafts/`（未送信。送るのは EM） |
 | 返答を反映 | 「採用 c-0001」「完了 t-0001」など | `python3 scripts/apply_reply.py "採用 c-0001" "完了 t-0001"`（`--dry-run` で確認、`--undo` で直前を戻す） | 約1分 | `data/tasks/tasks.json` |
 | 夕方 | 「夕方の締め」 | `python3 scripts/evening_wrapup.py` | 約1分 | 画面に1枚（読み取り専用） |
