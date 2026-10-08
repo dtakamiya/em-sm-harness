@@ -21,6 +21,8 @@ from check_no_leak import load_local_patterns  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ACTIONS_DIR = ROOT / "data" / "actions"
+KNOWN_KEYS = ("action_id", "kind", "title", "target", "body", "priority", "due", "expires",
+              "commit_stage", "em_decides", "sensitive")  # docs/design/21 §3。これ以外のキーは保存しない
 DEFAULT_RETENTION_DAYS = 14
 MAX_RETENTION_DAYS = 90
 
@@ -33,7 +35,7 @@ def prepare(raw, today, extra_patterns=()):
     """検証済みの新しい dict を返す（入力は変更しない）。不正なら SaveError。"""
     if not isinstance(raw, dict):
         raise SaveError("JSON オブジェクトではありません")
-    action = {**raw, "expires": raw.get("expires") or (today + timedelta(days=DEFAULT_RETENTION_DAYS)).isoformat()}
+    action = {**{k: raw[k] for k in KNOWN_KEYS if k in raw}, "expires": raw.get("expires") or (today + timedelta(days=DEFAULT_RETENTION_DAYS)).isoformat()}
     reason = validate_action(action, extra_patterns)
     if reason:
         raise SaveError(reason)
@@ -85,6 +87,9 @@ def main(argv=None):
         return 1
     except SaveError as exc:
         print(f"保存しませんでした: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"保存できませんでした（{type(exc).__name__}）。何も書いていません", file=sys.stderr)
         return 1
     print(f"承認キューに載せる準備ができました（未送信・送信は EM）: {path}")
     return 0

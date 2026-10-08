@@ -36,6 +36,12 @@ class PrepareTest(unittest.TestCase):
         with self.assertRaises(sa.SaveError):
             sa.prepare(sample(body="詳細は https://example.com"), TODAY)
 
+    def test_drops_unknown_keys(self):
+        action = sa.prepare(sample(extra_note="x", owner_name="y"), TODAY)
+        self.assertNotIn("extra_note", action)
+        self.assertNotIn("owner_name", action)
+        self.assertEqual(action["action_id"], "a-0001")
+
     def test_rejects_non_object(self):
         with self.assertRaises(sa.SaveError):
             sa.prepare(["x"], TODAY)
@@ -81,6 +87,28 @@ class MainTest(unittest.TestCase):
         self.assertIn("保存済み", err)
         self.assertEqual(saved["title"], "会議メモ共有")
         self.assertEqual(leftovers, [])
+
+    def test_unknown_keys_not_saved_to_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.run_main(tmp, sample(extra_note="x"))
+            saved = json.loads((Path(tmp) / "actions" / "a-0001.json").read_text(encoding="utf-8"))
+        self.assertNotIn("extra_note", saved)
+
+    def test_path_traversal_action_id_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = self.run_main(tmp, sample(action_id="../x"))
+            self.assertEqual(code, 1)
+            self.assertIn("保存しませんでした", err)
+            self.assertFalse((Path(tmp) / "actions").exists())
+            self.assertFalse((Path(tmp) / "x.json").exists())
+
+    def test_os_error_returns_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / "actions"
+            blocker.write_text("file, not dir", encoding="utf-8")
+            code, _, err = self.run_main(tmp, sample())
+        self.assertEqual(code, 1)
+        self.assertIn("保存できませんでした", err)
 
     def test_dry_run_does_not_write(self):
         with tempfile.TemporaryDirectory() as tmp:
