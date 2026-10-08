@@ -100,7 +100,7 @@
   - 「手間が減った」の基準（仮置き）: 導入後の朝夕合計の平均が **T の 80% 以下**。満たさなければ上限 5 件・判定語・欄の数を見直す。80% は EM が調整する
 - **受け入れ基準**
   - 検知は **実装がなく目視確認のみ**。§1 の判定例 7 件は `tests/fixtures/approval-queue/detection-cases.json` の期待値（A/B/C/非コミット）と本文の表が一致することをテストで照合する（将来の検知実装の期待値としても使う）。検知そのものの精度はこの PR では検証しない
-  - キューのサンプルが 60 秒で読める量に収まり、`tests/test_approval_queue.py` が通ること
+  - キューのサンプルが文字数 900・行数 30 の上限（60 秒で読める量の代理指標。時間は測らない）に収まり、`tests/test_approval_queue.py` と `tests/test_approval_queue_script.py` が通ること
 - **モック試作**（emh-041）: `scripts/approval_queue.py --slot morning|evening` が `data/actions/*.json`（1 ファイル 1 件）から上記の 1 枚を標準出力に出し、`queue_rendered` / `queue_item`（[26 §2](26-trial-review-metrics.md)）を `data/audit/` に本文なしで追記する。Jira / Slack へは書かない。`--dry-run` で追記を止める。`data/actions` が無いときは監査行も書かない。**入力 `data/actions` を作る元は未実装**（board の emh-045）で、実運用の入口にはまだ載せていない
   - 入力キー: 必須 `action_id` / `kind` / `title`（50 字以内）/ `target`（30 字）/ `body`（100 字）/ `priority`（high・medium・low）、任意 `due` / `expires` / `commit_stage`（none・A・B・C）/ `em_decides`（2 件・各 60 字まで）/ `sensitive`。不正な入力は除外して stderr に出し、紙面に「除外 N 件」を出す（fail-closed）。秘密値・実ドメイン・社内固有情報らしき文字列は [19](19-check-no-leak.md) と同じパターンで弾く
   - 仮置き（EM 判断は [Q-031〜Q-034](open-questions.md)）:

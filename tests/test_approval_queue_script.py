@@ -12,6 +12,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import approval_queue as aq  # noqa: E402
 
 TODAY = date(2026, 10, 5)
+SAMPLE_MAX_CHARS = 900
+SAMPLE_MAX_LINES = 30
 NOW = datetime(2026, 10, 5, 9, 0, tzinfo=timezone(timedelta(hours=9)))
 
 
@@ -105,8 +107,10 @@ class RenderTest(unittest.TestCase):
         self.assertIn("翌朝に回しました", aq.render(aq.build_queue(acts, TODAY), "evening"))
         self.assertNotRegex(self.out, aq.SENT_CLAIM)
 
-    def test_fits_in_60_seconds(self):
-        self.assertLessEqual(len(self.out), 900)
+    def test_sample_page_stays_within_char_and_line_budget(self):
+        # 「60 秒で読める」の代理指標。時間は測らず、文字数・行数の上限だけで決定的に判定する（実測は 21 §3）
+        self.assertLessEqual(len(self.out), SAMPLE_MAX_CHARS)
+        self.assertLessEqual(len(self.out.splitlines()), SAMPLE_MAX_LINES)
 
     def test_empty_queue(self):
         out = aq.render(aq.build_queue([], TODAY), "morning")
