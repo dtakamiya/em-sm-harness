@@ -45,6 +45,7 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 | 夕方 | 「夕方の締め」 | `python3 scripts/evening_wrapup.py` | 約1分 | 画面に1枚（読み取り専用） |
 | 金曜 | 「週次棚卸し」 | `python3 scripts/weekly_review.py`（先回りの放置要約は `python3 scripts/proactive_scan.py --digest`） | 約3分 | 画面に1枚（読み取り専用） |
 
+- 承認キュー（`scripts/approval_queue.py`、[21](docs/design/21-approval-queue.md)）は**試作・入力未接続**: 入力の `data/actions` を作る元が未実装（board の emh-045）のため、日常の手順にはまだ含めない
 - 計画・締め・棚卸しは、返答を定型語にして `apply_reply.py` で反映する（書式は [24-reply-apply.md](docs/design/24-reply-apply.md)）
 - 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan`）
 - 実データは `data/`（gitignore）に置く。サンプルで試すだけなら各 SKILL.md の「試す」を実行
