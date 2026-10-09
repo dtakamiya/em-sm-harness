@@ -44,6 +44,18 @@ class ScopeChangeTest(unittest.TestCase):
         self.assertEqual(jm._sum_points(self.sc["removed"]), (0, 0))
 
 
+    def test_carried_over_issue_is_not_double_counted_as_added(self):
+        # Arrange: 繰り越し課題の移動が猶予を超えて記録されている
+        issues = _cache()["issues"]
+        sprint = jm.active_sprint(issues)
+        issues[6]["transitions"] = [{"field": "sprint", "from": "Sprint 10", "to": "Sprint 11", "at": "2026-10-02"}]
+        # Act
+        sc = jm.scope_change(issues, sprint)
+        # Assert
+        self.assertEqual([i["key"] for i in sc["carried"]], ["EX-107"])
+        self.assertNotIn("EX-107", [i["key"] for i in sc["added"]])
+
+
 class ReportTest(unittest.TestCase):
     def test_incomplete_cache_reports_refetch_only(self):
         self.assertEqual(jm.build_report(_cache("jira-cache.incomplete.json")), jm.REFETCH_MESSAGE)
@@ -68,6 +80,12 @@ class ReportTest(unittest.TestCase):
         for i in cache["issues"]:
             i["sprints"] = []
         self.assertIn("active なスプリントがない", jm.build_report(cache))
+
+    def test_report_and_help_label_prototype_and_explain_terms(self):
+        report = jm.build_report(_cache())
+        for text in ("試作・架空サンプル専用", "SP=ストーリーポイント", "N=対象の課題数"):
+            self.assertIn(text, report)
+        self.assertIn("試作・架空サンプル専用", jm.__doc__)
 
     def test_cli_rejects_missing_file_without_output(self):
         with self.assertRaises(SystemExit) as ctx:

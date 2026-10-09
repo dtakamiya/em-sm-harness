@@ -2,6 +2,8 @@
 """Jira キャッシュ（06 準拠）から更新なし日数とスコープ変動を数える。読み取り専用・stdlib のみ・外部接続なし。
 
 設計: docs/design/22-jira-metrics-catalog.md §2.1・§2.3。事実の数だけを出す。評価語・原因の推測・担当者情報は出さない。
+
+【試作・架空サンプル専用】実キャッシュ（実プロジェクトの data/jira-cache）は渡さない。委任ラダー L1 では実データを扱わない。
 """
 import argparse
 import json
@@ -46,20 +48,27 @@ def _sum_points(issues):
     return sum(known), len(issues) - len(known)
 
 
+def _is_carried(issue, sprint):
+    """現スプリントに属し、終了済みの前スプリントにも属した課題。"""
+    sprints = issue.get("sprints", [])
+    return any(s["id"] == sprint["id"] for s in sprints) and any(
+        s["id"] != sprint["id"] and s["state"] == "closed" for s in sprints)
+
+
 def scope_change(issues, sprint, grace=SCOPE_GRACE_BDAYS):
     """開始から grace 営業日を超えて起きた sprint 遷移を、追加・除外・繰り越しに分けて数える。"""
     start, name = _day(sprint["start"]), sprint["name"]
     added, removed, carried = [], [], []
+    carried_keys = {i["key"] for i in issues if _is_carried(i, sprint)}
     for issue in issues:
         for tr in issue.get("transitions", []):
             if tr["field"] != "sprint" or bdays_between(start, _day(tr["at"])) <= grace:
                 continue
-            if tr["to"] == name:
+            if tr["to"] == name and issue["key"] not in carried_keys:  # 繰り越しは追加に重ねて数えない（22 §2.3）
                 added.append(issue)
             elif tr["from"] == name:
                 removed.append(issue)
-        older = [s for s in issue.get("sprints", []) if s["id"] != sprint["id"] and s["state"] == "closed"]
-        if older and any(s["id"] == sprint["id"] for s in issue.get("sprints", [])):
+        if issue["key"] in carried_keys:
             carried.append(issue)
     return {name: {"added": added, "removed": removed, "carried": carried}}[name]
 
@@ -67,7 +76,7 @@ def scope_change(issues, sprint, grace=SCOPE_GRACE_BDAYS):
 def _scope_line(label, group):
     points, unknown = _sum_points(group)
     tail = f"（SP なし {unknown} 件は除外）" if unknown else ""
-    return f"{label} {len(group)} 件（計 {points}SP）{tail}"
+    return f"{label} {len(group)} 件（計 {points} SP）{tail}"
 
 
 def build_report(cache):
@@ -76,7 +85,8 @@ def build_report(cache):
     issues, fetched = cache["issues"], _day(cache["fetched_at"])
     alias = cache["project_alias"]
     st = stagnation(issues, fetched)
-    lines = [f"観察（{alias}・{fetched.isoformat()}・進行中 N={st['population']}・取得: 完全）"]
+    lines = ["【試作・架空サンプル専用】",
+             f"観察（{alias}・{fetched.isoformat()}・進行中 N={st['population']}（N=対象の課題数）・取得: 完全）"]
     if st["population"] < MIN_POPULATION:
         lines.append(f"- 更新なし: 進行中 {st['population']} 件（件数が少ないため割合は出さない）")
     else:
@@ -92,12 +102,12 @@ def build_report(cache):
                   "  " + _scope_line("除外", sc["removed"]),
                   "  " + _scope_line("繰り越し", sc["carried"])]
     lines.append(f"限界: 更新なしは updated 基準の営業日（土日を除く・祝日は見ない）。開始から {SCOPE_GRACE_BDAYS} 営業日以内の"
-                 "スプリント変更は計画として除外。追加の経緯は Jira から分からない（確認先: 担当者）。")
+                 "スプリント変更は計画として除外。繰り越しは追加に含めない。SP=ストーリーポイント（見積もりの相対値）。追加の経緯は Jira から分からない（確認先: 担当者）。")
     return "\n".join(lines)
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Jira キャッシュから更新なし・スコープ変動を数える（読み取り専用）")
+    parser = argparse.ArgumentParser(description="【試作・架空サンプル専用。実キャッシュは渡さない】Jira キャッシュから更新なし・スコープ変動を数える（読み取り専用）")
     parser.add_argument("cache", help="data/jira-cache/<alias>/<YYYY-MM-DD>.json")
     args = parser.parse_args(argv)
     try:
