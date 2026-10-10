@@ -48,8 +48,9 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 
 - Jira 指標（`scripts/jira_metrics.py`、[22](docs/design/22-jira-metrics-catalog.md)）は**試作・架空サンプルのみ**: 更新なし日数とスプリント途中のスコープ変動を数える（SP＝ストーリーポイント＝見積もりの相対値、N＝対象の課題数。見積もり乖離・ブロッカー・担当偏りは未実装）。実接続のキャッシュにはまだ使わない
 - 承認キュー（`scripts/approval_queue.py`、[21](docs/design/21-approval-queue.md)）は**試作・架空サンプルのみ**: 入力は `python3 scripts/save_action.py <input>.json --dry-run` で検証して `data/actions/` に保存し（`--dry-run` を外すと保存）、`python3 scripts/approval_queue.py --slot morning --dry-run`（夕は `--slot evening`）で朝・夕それぞれ1枚を出す（個別承認・一括承認とも最大5件ずつ、超過は次の枠へ繰越。`--dry-run` は監査ログ `data/audit/` を追記しない）。送信はしない。上の毎日の手順にはまだ含めない（試用開始時に EM が使うか決める）
+- ステークホルダー報告（`skills/stakeholder-report`、[12](docs/design/12-secretary-job-list.md) R1/R2）は**試作・架空サンプルのみ**: 結論→リスク→要判断の下書きと、数字・日付の出典チェックリストを出す。上の毎日の手順にはまだ含めない（EM が実案件で試して手間が減るか判定する）
 - 計画・締め・棚卸しは、返答を定型語にして `apply_reply.py` で反映する（書式は [24-reply-apply.md](docs/design/24-reply-apply.md)）
-- 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `meeting-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan` / `sprint-health`）
+- 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `meeting-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan` / `sprint-health` / `stakeholder-report`）
 - 実データは `data/`（gitignore）に置く。サンプルで試すだけなら各 SKILL.md の「試す」を実行
 
 ## ディレクトリ
