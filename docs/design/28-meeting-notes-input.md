@@ -76,7 +76,7 @@ held_on: 2026-10-05
 - 期限は原文のまま `due_raw`。日付への変換は §7 の candidates 作成時（曖昧なら null）
 
 ## 6. 出力の種類（誰に何を見せるか）
-- M2 議事録下書き: `items` を「決定 → アクション（担当別）→ 未決」の順に並べた 1 枚。下書きとして `data/outputs/drafts/` に保存し、Confluence へは書かない（書込は L2・[11](11-l2-candidates.md)）。実装: `scripts/meeting_to_candidates.py`（emh-050。構造化 JSON → 下書き + candidates。抽出自体は秘書が行う）
+- M2 議事録下書き: `items` を「決定 → アクション（担当別）→ 未決」の順に並べた 1 枚。下書きとして `data/outputs/drafts/` に保存し、Confluence へは書かない（書込は L2・[11](11-l2-candidates.md)）。実装: `scripts/meeting_to_candidates.py`（emh-050。構造化 JSON → 下書き + candidates。抽出自体は秘書が行う。既存の下書きは .bak に退避してから上書き。**監査ログ（§7 末尾）は後続**＝emh-055）
 - M3 タスク化: §7
 
 ## 7. candidates への流し方（`candidates.json` 形式）

@@ -89,6 +89,21 @@ class MeetingToCandidatesTest(unittest.TestCase):
         self.assertTrue((self.tasks / "candidates.json.pre-meeting.bak").exists())
         self.assertFalse((self.tasks / "candidates.json.pre-slack.bak").exists())
 
+    def test_existing_minutes_are_backed_up_before_overwrite(self):
+        self.out.mkdir()
+        draft = self.out / "2026-10-09-ex-sync-minutes.md"
+        draft.write_text("EM が手で直した版\n", encoding="utf-8")
+        self.run_ingest(structured([action()]))
+        self.assertEqual((self.out / (draft.name + ".bak")).read_text(encoding="utf-8"), "EM が手で直した版\n")
+        self.assertIn("【下書き・未送信】", draft.read_text(encoding="utf-8"))
+
+    def test_dry_run_summary_says_planned(self):
+        _, counts, _, path = self.run_ingest(structured([action()]), dry_run=True)
+        text = mc.summary(counts, True, path)
+        self.assertIn("作成予定", text)
+        self.assertIn("追加予定", text)
+        self.assertNotIn("作成:", text)
+
     def test_invalid_input_writes_nothing(self):
         bad = [structured([action(to_em="yes")]), structured([action(kind="signal")]),
                {**structured([action()]), "skipped": "hr"}, {**structured([action()]), "schema_version": 2}]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """会議メモの構造化データ（28 §3）から、議事録下書き（M2）と個人タスク候補（M3）を作る。
 
-ローカルのみ・stdlib のみ・外部接続なし。設計: docs/design/28-meeting-notes-input.md §6〜§7。
+既存の下書きは .bak に退避してから上書きする。ローカルのみ・stdlib のみ・外部接続なし。設計: docs/design/28-meeting-notes-input.md §6〜§7。
 検証・書込は slack_to_candidates.py と共通（全件検証してから書く／更新前は退避／既出 source_ref は再提案しない）。
 未決・担当不明・除外行は議事録下書きに必ず残す（落とさない）。候補になるのは EM 本人の action_item
 （confidence が high/medium）だけ。下書きは未送信で、Confluence 等への掲載は EM。
@@ -110,6 +110,8 @@ def ingest(structured_path, tasks_dir, out_dir, dry_run):
     minutes_path = out_dir / f"{Path(source['file']).stem}-minutes.md"
     if not dry_run:
         out_dir.mkdir(parents=True, exist_ok=True)
+        if minutes_path.exists():  # EM が手で直した下書きを黙って上書きしない
+            sc._atomic_write_bytes(minutes_path.with_name(minutes_path.name + ".bak"), minutes_path.read_bytes())
         sc._atomic_write_bytes(minutes_path, minutes.encode("utf-8"))
         if fresh:
             tasks_dir.mkdir(parents=True, exist_ok=True)
@@ -121,8 +123,8 @@ def ingest(structured_path, tasks_dir, out_dir, dry_run):
 
 
 def summary(counts, dry_run, minutes_path):
-    mode = "（--dry-run: 書き込みなし）" if dry_run else ""
-    return (f"議事録下書きを作成: {minutes_path.name} / タスク候補を {counts['added']} 件追加{mode}"
+    verb, cand_verb = ("作成予定", "追加予定（--dry-run: 書き込みなし）") if dry_run else ("作成", "追加")
+    return (f"議事録下書きを{verb}: {minutes_path.name} / タスク候補を {counts['added']} 件{cand_verb}"
             f" / 既出 {counts['duplicate']} 件・対象外 {counts['not_eligible']} 件")
 
 
