@@ -88,6 +88,18 @@ class RenderTest(unittest.TestCase):
         self.assertIn("🟢 順調", out)
         self.assertIn("対応不要", out)
 
+    def test_member_only_is_not_green_and_says_ref_missing(self):
+        out = ooo.render(ooo.build_followup(_tasks(), SINCE, TODAY, member="member-a"), True, 1)
+        self.assertNotIn("🟢", out)
+        self.assertIn("--ref なしのため EM 側のタスクは未確認", out)
+
+    def test_unknown_status_is_reported_not_green(self):
+        tasks = [{**_tasks()[0], "id": "t-0999", "status": "archived"}]
+        out = ooo.render(ooo.build_followup(tasks, SINCE, TODAY, ref=REF), True, 0)
+        self.assertNotIn("🟢", out)
+        self.assertIn("分類不能 1 件", out)
+        self.assertIn("t-0999", out)
+
     def test_more_than_five_rows_are_folded(self):
         base = _tasks()[1]
         tasks = [{**base, "id": f"t-09{i:02d}"} for i in range(7)]

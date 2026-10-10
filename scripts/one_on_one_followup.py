@@ -63,7 +63,9 @@ def build_followup(tasks, since, today, ref=None, member=None):
                 before += 1  # 前回より前に完了＝持ち越しではない
             else:
                 done.append(t)
+    known = ACTIVE + ("waiting", "dropped", "done")
     return {
+        "unclassified": [t for t in matched if t["status"] not in known],
         "since": since, "today": today, "ref": ref, "member": member, "matched": len(matched),
         "done": done, "done_before": before,
         "active": [t for t in matched if t["status"] in ACTIVE],
@@ -108,10 +110,21 @@ def render(f, tasks_file_exists=True, archive_count=0):
     if f["matched"] == 0:
         return "\n".join(head + [f"🟡 注意: 該当するタスクがありません。{NOT_FOUND_HINT}", "", "**EM がやること**: 前回のメモを見て約束を確認する（タスク化していなければ、今回のアジェンダ作成時に起こす）", ""])
     carried = len(f["active"]) + len(f["waiting"])
-    status = "🟡 注意" if carried else "🟢 順調"
-    head += [f"{status}: 前回の約束のうち未完了 {carried} 件・完了 {len(f['done'])} 件・中止 {len(f['dropped'])} 件", "",
-             f"**EM がやること**: {'未完了の扱い（今回の議題にする / 閉じる）を決める' if carried else '対応不要'}"]
+    unknown, no_ref = len(f["unclassified"]), not f["ref"]
+    status = "🟡 注意" if carried or unknown or no_ref else "🟢 順調"
+    summary = f"前回の約束のうち未完了 {carried} 件・完了 {len(f['done'])} 件・中止 {len(f['dropped'])} 件"
+    if unknown:
+        summary += f"・分類不能 {unknown} 件"
+    todo = []
+    if carried:
+        todo.append("未完了の扱い（今回の議題にする / 閉じる）を決める")
+    if unknown:
+        todo.append("分類不能のタスクの状態を確認する")
+    if no_ref:
+        todo.append("--ref なしのため EM 側のタスクは未確認。前回メモ名を付けて再実行する")
+    head += [f"{status}: {summary}", "", f"**EM がやること**: {'、'.join(todo) if todo else '対応不要'}"]
     out = head
+    out += _section("分類不能（状態が未知）", f["unclassified"], lambda t: f"{t['id']} {t['title']}（状態 {t['status']}）")
     out += _section("未完了（EM のタスク）", f["active"], lambda t: _active_line(t, today))
     out += _section("返信待ち（相手の約束）", f["waiting"], lambda t: _waiting_line(t, today))
     out += _section("前回以降に完了", f["done"], _done_line)
