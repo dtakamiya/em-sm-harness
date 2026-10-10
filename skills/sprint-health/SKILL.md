@@ -5,6 +5,8 @@ description: Jira キャッシュ（06 準拠）の指標を 31 のテンプレ�
 
 # スプリント健全性（S1）
 
+用語: **S1** = 秘書の仕事の番号（スプリント健全性チェック）。**31** = 出力テンプレの設計書、**31 §2** = 状態語（🟢/🟡）を件数で決める規則、**H1〜H6** = 31 §6 の出す前の点検項目（観察の逐語一致・状態語・解釈の固定文言・担当者情報なし・不完全時の数字なし・本文 600 字）。**SP** = ストーリーポイント（見積もり値）、**N** = 進行中の課題数、**共起** = 同じ時点に並んで出ただけで、原因とは限らない関係。本文の 1 行目にも「SP=見積もり値」を添える。
+
 設計: `docs/design/31-sprint-health-template.md`（型 §4・状態語 §2・解釈 §3・検証 §6）/ 指標: `docs/design/22-jira-metrics-catalog.md` / 品質基準: `docs/design/14-output-quality-checklist.md`
 
 ## 手順
@@ -15,7 +17,7 @@ description: Jira キャッシュ（06 準拠）の指標を 31 のテンプレ�
    - 状態語: 31 §2 の件数規則（更新なし・追加・除外のどれかが 1 件以上なら 🟡、全て 0 なら 🟢）。🔴 は使わない。N < 5 では更新なしを 0 件扱いにしない
    - 解釈の候補: 31 §3 の固定文言から最大 2 つ。両方出るときは「共起。関係は未確認」の一文を足す。除外だけの 🟡 は「解釈の候補: なし」
    - 限界: 本文は 1 行に縮め、出力の限界行を末尾「詳細」に全文で置く
-4. 31 §6（H1〜H6）で内部点検する（合否は出力に載せない）。本文 600 字以内
+4. 31 §6（H1〜H6）で内部点検する（観察が出力と一字一句同じ・状態語が件数規則どおり・候補が固定文言 2 つ以内・担当者情報なし・不完全時は数字なし・本文 600 字以内。合否は出力に載せない）。本文 600 字以内
 5. EM に 1 枚を返す。前置き・経緯説明は不要。担当への確認・共有は EM（下書きまで）
 
 ## してはいけないこと
@@ -25,4 +27,4 @@ description: Jira キャッシュ（06 準拠）の指標を 31 のテンプレ�
 - 1on1 の準備に jira_metrics の数字を使う（22 §1）
 
 ## 試す
-`python3 scripts/jira_metrics.py tests/fixtures/jira-metrics/jira-cache.sample.json` の出力を流し込むと `examples/expected-output.md` になる（全て架空）。不完全キャッシュ（`jira-cache.incomplete.json`）は再取得メッセージ 1 行だけ（`examples/expected-incomplete.md`）。
+`python3 scripts/jira_metrics.py tests/fixtures/jira-metrics/jira-cache.sample.json` の出力を流し込むと `examples/expected-output.md` になる（全て架空）。他の 3 例: 全件 0 の 🟢（`jira-cache.green.json` → `expected-green.md`）、N < 5 で除外のみの 🟡（`jira-cache.small-removed.json` → `expected-small-removed.md`、更新なしを 0 件扱いにせず解釈の候補は「なし」）、不完全キャッシュ（`jira-cache.incomplete.json`）は再取得メッセージ 1 行だけ（`expected-incomplete.md`）。

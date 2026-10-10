@@ -46,6 +46,36 @@ class SprintHealthSkillTest(unittest.TestCase):
         self.assertLessEqual(len(re.findall(r"^[①②③]", expected, re.M)), 2)
         self.assertLessEqual(len(expected.split("詳細:", 1)[0]), MAX_BODY_CHARS)
 
+    def test_green_case_has_no_candidates_and_zero_counts(self):
+        # Arrange
+        expected = (SKILL / "examples" / "expected-green.md").read_text(encoding="utf-8")
+        lines = jm.build_report(_load("jira-cache.green.json")).split("\n")[1:]
+        # Act / Assert
+        for line in lines:
+            self.assertIn(line, expected)
+        self.assertTrue(expected.startswith("🟢"))
+        self.assertIn("解釈の候補: なし", expected)
+        self.assertIsNone(BANNED.search(expected))
+
+    def test_small_population_removed_only_is_yellow_without_zero_stale(self):
+        # Arrange
+        expected = (SKILL / "examples" / "expected-small-removed.md").read_text(encoding="utf-8")
+        report = jm.build_report(_load("jira-cache.small-removed.json"))
+        # Act / Assert
+        for line in report.split("\n")[1:]:
+            self.assertIn(line, expected)
+        self.assertTrue(expected.startswith("🟡"))
+        self.assertNotIn("のうち", expected)  # 更新なしを 0 件扱いにしない
+        self.assertIn("解釈の候補: なし", expected)
+        self.assertIsNone(BANNED.search(expected))
+
+    def test_all_examples_state_sp_meaning_within_body_limit(self):
+        for name in ("expected-output.md", "expected-green.md", "expected-small-removed.md"):
+            with self.subTest(name):
+                text = (SKILL / "examples" / name).read_text(encoding="utf-8")
+                self.assertIn("SP=見積もり値", text.split("\n")[0])
+                self.assertLessEqual(len(text.split("詳細:", 1)[0]), MAX_BODY_CHARS)
+
     def test_incomplete_cache_yields_only_refetch_message(self):
         expected = (SKILL / "examples" / "expected-incomplete.md").read_text(encoding="utf-8").strip()
         self.assertEqual(expected, jm.build_report(_load("jira-cache.incomplete.json")))
