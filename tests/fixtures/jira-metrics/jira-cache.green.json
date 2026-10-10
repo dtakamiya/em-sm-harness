@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "fetched_at": "2026-10-09T08:30:00+09:00",
+  "project_alias": "ex-proj",
+  "jql_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "complete": true,
+  "partial_reason": null,
+  "issue_count": 5,
+  "issues": [
+    {
+      "key": "EX-101",
+      "summary": null,
+      "status": "In Progress",
+      "status_category": "indeterminate",
+      "issuetype": "Task",
+      "priority": "Medium",
+      "assignee_ref": null,
+      "created": "2026-09-20",
+      "updated": "2026-10-08",
+      "resolved": null,
+      "story_points": 3,
+      "flagged": false,
+      "parent_key": null,
+      "sprints": [
+        {
+          "id": 11,
+          "name": "Sprint 11",
+          "state": "active",
+          "start": "2026-09-28",
+          "end": "2026-10-09"
+        }
+      ],
+      "links": [],
+      "transitions": []
+    },
+    {
+      "key": "EX-102",
+      "summary": null,
+      "status": "In Progress",
+      "status_category": "indeterminate",
+      "issuetype": "Task",
+      "priority": "Medium",
+      "assignee_ref": null,
+      "created": "2026-09-20",
+      "updated": "2026-10-08",
+      "resolved": null,
+      "story_points": 3,
+      "flagged": false,
+      "parent_key": null,
+      "sprints": [
+        {
+          "id": 11,
+          "name": "Sprint 11",
+          "state": "active",
+          "start": "2026-09-28",
+          "end": "2026-10-09"
+        }
+      ],
+      "links": [],
+      "transitions": []
+    },
+    {
+      "key": "EX-103",
+      "summary": null,
+      "status": "In Progress",
+      "status_category": "indeterminate",
+      "issuetype": "Task",
+      "priority": "Medium",
+      "assignee_ref": null,
+      "created": "2026-09-20",
+      "updated": "2026-10-08",
+      "resolved": null,
+      "story_points": 3,
+      "flagged": false,
+      "parent_key": null,
+      "sprints": [
+        {
+          "id": 11,
+          "name": "Sprint 11",
+          "state": "active",
+          "start": "2026-09-28",
+          "end": "2026-10-09"
+        }
+      ],
+      "links": [],
+      "transitions": []
+    },
+    {
+      "key": "EX-104",
+      "summary": null,
+      "status": "In Progress",
+      "status_category": "indeterminate",
+      "issuetype": "Task",
+      "priority": "Medium",
+      "assignee_ref": null,
+      "created": "2026-09-20",
+      "updated": "2026-10-08",
+      "resolved": null,
+      "story_points": 3,
+      "flagged": false,
+      "parent_key": null,
+      "sprints": [
+        {
+          "id": 11,
+          "name": "Sprint 11",
+          "state": "active",
+          "start": "2026-09-28",
+          "end": "2026-10-09"
+        }
+      ],
+      "links": [],
+      "transitions": []
+    },
+    {
+      "key": "EX-105",
+      "summary": null,
+      "status": "In Progress",
+      "status_category": "indeterminate",
+      "issuetype": "Task",
+      "priority": "Medium",
+      "assignee_ref": null,
+      "created": "2026-09-20",
+      "updated": "2026-10-08",
+      "resolved": null,
+      "story_points": null,
+      "flagged": false,
+      "parent_key": null,
+      "sprints": [
+        {
+          "id": 11,
+          "name": "Sprint 11",
+          "state": "active",
+          "start": "2026-09-28",
+          "end": "2026-10-09"
+        }
+      ],
+      "links": [],
+      "transitions": []
+    }
+  ]
+}
