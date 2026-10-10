@@ -14,7 +14,9 @@ PERSON_ORDER = re.compile(r"assignee_ref|u_\w+|担当者別|ランキング")
 
 
 def _sample():
-    return re.findall(r"```\n(.*?)```", TEMPLATE.read_text(encoding="utf-8"), re.S)[1]
+    text = TEMPLATE.read_text(encoding="utf-8")
+    section = text.split("## 匿名化サンプル", 1)[1]
+    return re.search(r"```\n(.*?)```", section, re.S).group(1)
 
 
 def _report_lines():
@@ -36,6 +38,7 @@ class RetroJiraMetricsSlotTest(unittest.TestCase):
         body, detail = sample.split("詳細（限界）:", 1)
         self.assertNotIn("限界:", body)
         self.assertIn("updated 基準", detail)
+        self.assertNotIn("■", detail)  # 末尾配置（以降に見出しが来ない）
 
     def test_template_documents_slot_rules(self):
         text = TEMPLATE.read_text(encoding="utf-8")
