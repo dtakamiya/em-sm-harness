@@ -91,7 +91,7 @@ held_on: 2026-10-05
 
 - EM 以外のアクション・`low`・`decision`・`open_question` は流さない（EM が確定するのは自分のタスクだけ）
 - 書き込みは 13 §9 と同じ（アトミック書込・更新前の退避・型不正は理由つき拒否・既出 `source_ref` の再提案なし）。実装は `scripts/meeting_to_candidates.py`（`slack_to_candidates.py` の検証・書込処理を流用。退避ファイルは `candidates.json.pre-meeting.bak`。`--audit-dir` で監査先を指定）
-- 監査: `data/audit/` に `{event:"meeting_ingest", file, items:{decision:n,…}, excluded:n, skipped}` を 1 行（本文・引用は入れない）。取り込み成功時のみ（`--dry-run` では書かない）。承認キューの proposed 上限には数えない
+- 監査: `data/audit/` に `{event:"meeting_ingest", file, items:{decision:n,…}, excluded:n, skipped}` を 1 行（本文・引用は入れない）。取り込み成功時のみ（`--dry-run` では書かない）。承認キューの proposed 上限には数えない。`file` は basename のみ記録する。`skipped` は現状常に null（skipped 付きの入力は取り込み前に止めるため）。重複のみで候補が増えない取り込みも記録する。監査行だけ書けなかった場合は stderr に「取り込み済み・監査のみ失敗」と出して非 0（2）で終了する
 
 ## 8. 検証
 **テストの範囲**: `expected.json` の形式・自己整合（引用が原文にある・全行の振り分け・候補の条件）の検証のみ。メモから自動で抽出する処理（抽出器）は未実装で、後続で追加する。

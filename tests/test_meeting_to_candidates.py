@@ -1,5 +1,7 @@
 import json
 import sys
+import contextlib
+import io
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -146,6 +148,22 @@ class MeetingToCandidatesTest(unittest.TestCase):
         with self.assertRaises(sc.IngestError):
             self.run_audited(structured([action(kind="signal")]))
         self.assertFalse((self.dir / "audit").exists())
+
+    def test_audit_file_is_basename_only(self):
+        self.run_audited(structured([action()], file="notes/2026/2026-10-09-ex-sync.md"))
+        self.assertEqual(self.audit_rows()[0]["file"], "2026-10-09-ex-sync.md")
+
+    def test_audit_failure_exits_nonzero_after_writing_outputs(self):
+        blocker = self.dir / "audit"
+        blocker.write_text("file, not dir", encoding="utf-8")  # mkdir/open が OSError になる
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            code = mc.main([str(self.write(structured([action()]))), "--tasks-dir", str(self.tasks),
+                            "--out-dir", str(self.out), "--audit-dir", str(blocker)])
+        self.assertEqual(code, 2)
+        self.assertIn("取り込み済み・監査のみ失敗", err.getvalue())
+        self.assertTrue((self.out / "2026-10-09-ex-sync-minutes.md").exists())
+        self.assertTrue((self.tasks / "candidates.json").exists())
 
     def test_audit_is_off_when_no_audit_dir_given(self):
         self.run_ingest(structured([action()]))

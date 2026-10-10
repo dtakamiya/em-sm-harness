@@ -100,17 +100,24 @@ def render_minutes(source, items, excluded):
     return "\n".join(lines) + "\n"
 
 
+class AuditWriteError(Exception):
+    """議事録・候補の書込は済んでいるが、監査行だけ書けなかった。"""
+
+
 def audit_row(source, items, excluded, now):
     """件数だけの 1 行（28 §7）。本文・引用・担当者名は入れない。skipped は validate 通過後なので常に None。"""
-    return {"ts": now.isoformat(timespec="seconds"), "event": "meeting_ingest", "file": source["file"],
+    return {"ts": now.isoformat(timespec="seconds"), "event": "meeting_ingest", "file": Path(source["file"]).name,
             "items": {k: sum(1 for i in items if i["kind"] == k) for k in KINDS},
             "excluded": len(excluded), "skipped": None}
 
 
 def append_audit(audit_dir, now, row):
-    audit_dir.mkdir(parents=True, exist_ok=True)
-    with (audit_dir / f"{now.date().isoformat()}.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    try:
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        with (audit_dir / f"{now.date().isoformat()}.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise AuditWriteError(str(exc)) from exc
 
 
 def ingest(structured_path, tasks_dir, out_dir, dry_run, audit_dir=None, now=None):
@@ -159,6 +166,9 @@ def main(argv=None):
     except sc.IngestError as exc:
         print(f"取り込みを中止しました: {exc}", file=sys.stderr)
         return 1
+    except AuditWriteError as exc:
+        print(f"取り込み済み・監査のみ失敗: {exc}（議事録下書きと候補は書込済み。監査行は手動で補ってください）", file=sys.stderr)
+        return 2
     print(summary(counts, args.dry_run, minutes_path))
     for c in fresh:
         print(f"- {c['id']} {c['title']}（出典 {c['source_ref']}）")
