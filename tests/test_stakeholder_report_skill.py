@@ -4,13 +4,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills" / "stakeholder-report"
+# u_\w+ は Jira/Slack のユーザー ID 風の文字列（実名・実 ID の混入）を弾く意図
 BANNED = re.compile(r"送信しました|更新しました|遅い人|おそらく|放置|原因は|u_\w+|https?://")
+DATE_OR_COUNT = re.compile(r"\d+日|\d+/\d+")
 MAX_BODY_CHARS = 600
 CHECKLIST_MARK = "--- 別添: 事実確認リスト ---"
 
 
 def _expected():
     return (SKILL / "examples" / "expected-output.md").read_text(encoding="utf-8")
+
+
+def unsourced_numbers(text):
+    """Body numbers/dates neither sourced on their line nor listed in the checklist."""
+    body, checklist = text.split(CHECKLIST_MARK, 1)
+    found = []
+    for line in body.splitlines():
+        if "⟦EM が決める⟧" in line or "出典" in line:
+            continue
+        found += [m for m in DATE_OR_COUNT.findall(line) if m not in checklist]
+    return found
 
 
 class StakeholderReportSkillTest(unittest.TestCase):
@@ -53,6 +66,14 @@ class StakeholderReportSkillTest(unittest.TestCase):
         self.assertIn("連携先の準備は順調らしい", source)
         self.assertNotIn("連携先の準備", body)
         self.assertIn("出典未確認: 連携先の準備", checklist)
+
+    def test_body_numbers_have_source_or_checklist(self):
+        # Arrange
+        expected = _expected()
+        mistaken = expected.replace("連携テストが遅れる可能性（日数は未確認）", "連携テストが 3日 遅れる可能性")
+        # Act / Assert
+        self.assertEqual(unsourced_numbers(expected), [])
+        self.assertEqual(unsourced_numbers(mistaken), ["3日"])
 
     def test_every_checklist_line_has_source_and_check_place(self):
         checklist = _expected().split(CHECKLIST_MARK, 1)[1]
