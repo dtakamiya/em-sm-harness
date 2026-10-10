@@ -91,6 +91,18 @@ class ProgressTest(unittest.TestCase):
             self.assertNotIn(word, out.split("進捗")[1].split("\n")[0])
 
 
+class ReportNoActiveSprintTest(unittest.TestCase):
+    def test_progress_line_says_not_counted_when_no_active_sprint(self):
+        # Arrange
+        cache = _cache()
+        for issue in cache["issues"]:
+            issue["sprints"] = []
+        # Act
+        out = jm.build_report(cache)
+        # Assert
+        self.assertIn("- 進捗: active なスプリントがないため数えない", out)
+
+
 class ReportTest(unittest.TestCase):
     def test_incomplete_cache_reports_refetch_only(self):
         self.assertEqual(jm.build_report(_cache("jira-cache.incomplete.json")), jm.REFETCH_MESSAGE)

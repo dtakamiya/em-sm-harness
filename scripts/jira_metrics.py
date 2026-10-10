@@ -103,6 +103,7 @@ def build_report(cache):
                      f" {STALE_BDAYS} 営業日以上更新なし（{keys}）")
     sprint = active_sprint(issues)
     if sprint is None:
+        lines.append("- 進捗: active なスプリントがないため数えない")
         lines.append("- スコープ: active なスプリントがないため数えない")
     else:
         sc = scope_change(issues, sprint)
