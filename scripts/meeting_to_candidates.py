@@ -9,12 +9,14 @@
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import slack_to_candidates as sc
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT_DIR = ROOT / "data" / "outputs" / "drafts"
+DEFAULT_AUDIT_DIR = ROOT / "data" / "audit"
 BACKUP_NAME = "candidates.json.pre-meeting.bak"  # slack 取り込み・apply_reply の退避とは別名
 KINDS = ("decision", "action_item", "open_question")
 BANNER = "【下書き・未送信】"
@@ -98,7 +100,27 @@ def render_minutes(source, items, excluded):
     return "\n".join(lines) + "\n"
 
 
-def ingest(structured_path, tasks_dir, out_dir, dry_run):
+class AuditWriteError(Exception):
+    """議事録・候補の書込は済んでいるが、監査行だけ書けなかった。"""
+
+
+def audit_row(source, items, excluded, now):
+    """件数だけの 1 行（28 §7）。本文・引用・担当者名は入れない。skipped は validate 通過後なので常に None。"""
+    return {"ts": now.isoformat(timespec="seconds"), "event": "meeting_ingest", "file": Path(source["file"]).name,
+            "items": {k: sum(1 for i in items if i["kind"] == k) for k in KINDS},
+            "excluded": len(excluded), "skipped": None}
+
+
+def append_audit(audit_dir, now, row):
+    try:
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        with (audit_dir / f"{now.date().isoformat()}.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise AuditWriteError(str(exc)) from exc
+
+
+def ingest(structured_path, tasks_dir, out_dir, dry_run, audit_dir=None, now=None):
     source, items, excluded = validate(sc._read_json(structured_path, "構造化データ"))
     cand_path = tasks_dir / "candidates.json"
     candidates = sc._read_list(cand_path, "candidates")
@@ -119,6 +141,9 @@ def ingest(structured_path, tasks_dir, out_dir, dry_run):
                 sc._atomic_write_bytes(tasks_dir / BACKUP_NAME, cand_path.read_bytes())
             body = json.dumps({"version": 1, "candidates": [*candidates, *fresh]}, ensure_ascii=False, indent=1) + "\n"
             sc._atomic_write_bytes(cand_path, body.encode("utf-8"))
+        if audit_dir is not None:  # 書込がすべて成功した後に記録する（失敗した取り込みは記録しない）
+            now = now or datetime.now().astimezone()
+            append_audit(audit_dir, now, audit_row(source, items, excluded, now))
     return fresh, counts, minutes, minutes_path
 
 
@@ -133,13 +158,17 @@ def main(argv=None):
     ap.add_argument("structured", type=Path, help="data/structured/meeting/<file>.json")
     ap.add_argument("--tasks-dir", type=Path, default=Path("data/tasks"))
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    ap.add_argument("--audit-dir", type=Path, default=DEFAULT_AUDIT_DIR)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
     try:
-        fresh, counts, minutes, minutes_path = ingest(args.structured, args.tasks_dir, args.out_dir, args.dry_run)
+        fresh, counts, minutes, minutes_path = ingest(args.structured, args.tasks_dir, args.out_dir, args.dry_run, args.audit_dir)
     except sc.IngestError as exc:
         print(f"取り込みを中止しました: {exc}", file=sys.stderr)
         return 1
+    except AuditWriteError as exc:
+        print(f"取り込み済み・監査のみ失敗: {exc}（議事録下書きと候補は書込済み。監査行は手動で補ってください）", file=sys.stderr)
+        return 2
     print(summary(counts, args.dry_run, minutes_path))
     for c in fresh:
         print(f"- {c['id']} {c['title']}（出典 {c['source_ref']}）")
