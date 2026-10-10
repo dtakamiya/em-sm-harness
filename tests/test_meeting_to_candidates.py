@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -111,6 +112,48 @@ class MeetingToCandidatesTest(unittest.TestCase):
             with self.assertRaises(sc.IngestError):
                 self.run_ingest(data)
         self.assertFalse(self.tasks.exists() or self.out.exists())
+
+    def audit_rows(self):
+        files = sorted((self.dir / "audit").glob("*.jsonl"))
+        return [json.loads(line) for f in files for line in f.read_text(encoding="utf-8").splitlines()]
+
+    def run_audited(self, data, dry_run=False):
+        now = datetime(2026, 10, 10, 9, 0, tzinfo=timezone.utc)
+        return mc.ingest(self.write(data), self.tasks, self.out, dry_run, self.dir / "audit", now)
+
+    def test_ingest_appends_one_count_only_audit_row(self):
+        items = [action("m-01", observation="秘密の本文ABC"), action("m-02", kind="decision", decided_by=[]),
+                 {"id": "m-03", "kind": "open_question", "observation": "未決の本文XYZ", "confidence": "medium"}]
+        self.run_audited(structured(items, [{"line": 3, "reason": "日程のみ"}]))
+        rows = self.audit_rows()
+        self.assertEqual(rows, [{"ts": "2026-10-10T09:00:00+00:00", "event": "meeting_ingest",
+                                 "file": "2026-10-09-ex-sync.md",
+                                 "items": {"decision": 1, "action_item": 1, "open_question": 1},
+                                 "excluded": 1, "skipped": None}])
+        raw = "".join(f.read_text(encoding="utf-8") for f in (self.dir / "audit").glob("*.jsonl"))
+        for leaked in ("秘密の本文", "未決の本文", "日程のみ"):
+            self.assertNotIn(leaked, raw)
+        self.assertEqual((self.dir / "audit" / "2026-10-10.jsonl").read_text(encoding="utf-8").count("\n"), 1)
+
+    def test_audit_rows_append_and_duplicates_still_logged(self):
+        data = structured([action()])
+        self.run_audited(data)
+        self.run_audited(data)
+        self.assertEqual([r["event"] for r in self.audit_rows()], ["meeting_ingest", "meeting_ingest"])
+
+    def test_dry_run_and_invalid_input_write_no_audit(self):
+        self.run_audited(structured([action()]), dry_run=True)
+        with self.assertRaises(sc.IngestError):
+            self.run_audited(structured([action(kind="signal")]))
+        self.assertFalse((self.dir / "audit").exists())
+
+    def test_audit_is_off_when_no_audit_dir_given(self):
+        self.run_ingest(structured([action()]))
+        self.assertFalse((self.dir / "audit").exists())
+
+    def test_audit_does_not_touch_approval_queue_state(self):
+        self.run_audited(structured([action()]))
+        self.assertEqual({p.name for p in self.dir.iterdir()} - {"in.json"}, {"tasks", "out", "audit"})
 
     def test_no_real_names_in_examples(self):
         for path in EXAMPLES.glob("*.json"):
