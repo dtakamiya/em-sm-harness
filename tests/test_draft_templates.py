@@ -74,5 +74,33 @@ class DraftTemplateTest(unittest.TestCase):
             self.assertLessEqual(len(blocks(self.read(name))[1]), MAX_SAMPLE_CHARS, name)
 
 
+class OneOnOneAgendaTest(unittest.TestCase):
+    """emh-047: 1on1 テンプレを 14（A/B/D）と 22 §1（Jira 指標を入力にしない）で検証する。"""
+
+    JIRA_DERIVED = re.compile(r"jira_metrics|In Progress|他チケット|平均|中央値|サイクルタイム|ベロシティ|\bSP\b|ランキング順")
+
+    def sample(self):
+        return blocks((DIR / "one-on-one-agenda.md").read_text(encoding="utf-8"))[1]
+
+    def test_second_line_has_conclusion_and_em_action(self):
+        for block in blocks((DIR / "one-on-one-agenda.md").read_text(encoding="utf-8")):
+            self.assertRegex(block.split("\n")[1], r"^結論: .*EM がやること")
+
+    def test_observations_and_questions_within_limits(self):
+        sample = self.sample()
+        observations = sample.split("2. 観察（事実）")[1].split("3. 解釈の候補")[0]
+        questions = sample.split("4. 聞く問い")[1].split("5. 相手のターン")[0]
+        self.assertLessEqual(len(re.findall(r"^\s+- ", observations, re.M)), 3)
+        self.assertLessEqual(len(re.findall(r"^\s+- ", questions, re.M)), 3)
+
+    def test_sample_does_not_use_jira_derived_comparisons(self):
+        self.assertIsNone(self.JIRA_DERIVED.search(self.sample()))
+
+    def test_template_declares_jira_metrics_are_not_input(self):
+        text = (DIR / "one-on-one-agenda.md").read_text(encoding="utf-8")
+        self.assertIn("Jira 指標", text.split("## 必須項目")[0])
+        self.assertIn("入力にしない", text.split("## 必須項目")[0])
+
+
 if __name__ == "__main__":
     unittest.main()
