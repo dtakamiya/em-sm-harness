@@ -1,0 +1,75 @@
+{
+ "schema_version": 1,
+ "source": {
+  "file": "2026-10-07-ex-sync.md",
+  "meeting_alias": "ex-sync",
+  "held_on": "2026-10-07",
+  "line_count": 5
+ },
+ "extracted_at": "2026-10-07T18:00:00+09:00",
+ "skipped": null,
+ "items": [
+  {
+   "id": "m-01",
+   "kind": "open_question",
+   "asked_of": [],
+   "needs_em": false,
+   "observation": "リリース判断の前にリスク確認が必要、とメモにある。担当は書かれていない",
+   "evidence": {
+    "line": 1,
+    "quote": "リスク確認が必要"
+   },
+   "confidence": "medium"
+  },
+  {
+   "id": "m-02",
+   "kind": "action_item",
+   "owner": null,
+   "to_em": false,
+   "due_raw": null,
+   "observation": "ログの保存期間を確認する、とメモにある。担当は読み取れない",
+   "evidence": {
+    "line": 2,
+    "quote": "誰かがログの保存期間を確認する"
+   },
+   "confidence": "low"
+  },
+  {
+   "id": "m-03",
+   "kind": "action_item",
+   "owner": "m_c3c3c3",
+   "to_em": false,
+   "due_raw": null,
+   "observation": "m_c3c3c3 がデータ移行の見積もりを出す、とメモにある",
+   "evidence": {
+    "line": 4,
+    "quote": "がデータ移行の見積もりを出す"
+   },
+   "confidence": "high"
+  },
+  {
+   "id": "m-04",
+   "kind": "action_item",
+   "owner": "em",
+   "to_em": true,
+   "due_raw": "2026-10-12",
+   "observation": "em が m_c3c3c3 の見積もりをレビューする、とメモにある",
+   "evidence": {
+    "line": 4,
+    "quote": "em がレビュー（2026-10-12 まで）"
+   },
+   "confidence": "high"
+  }
+ ],
+ "excluded": [
+  {
+   "line": 3,
+   "reason": "「かも」で確定していない。担当の確約として扱わない"
+  },
+  {
+   "line": 5,
+   "reason": "次回の日程であり、決定・依頼・未決のいずれでもない"
+  }
+ ],
+ "notes": []
+}

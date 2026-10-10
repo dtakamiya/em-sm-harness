@@ -76,7 +76,7 @@ held_on: 2026-10-05
 - 期限は原文のまま `due_raw`。日付への変換は §7 の candidates 作成時（曖昧なら null）
 
 ## 6. 出力の種類（誰に何を見せるか）
-- M2 議事録下書き: `items` を「決定 → アクション（担当別）→ 未決」の順に並べた 1 枚。下書きとして `data/outputs/drafts/` に保存し、Confluence へは書かない（書込は L2・[11](11-l2-candidates.md)）。実装は別項目
+- M2 議事録下書き: `items` を「決定 → アクション（担当別）→ 未決」の順に並べた 1 枚。下書きとして `data/outputs/drafts/` に保存し、Confluence へは書かない（書込は L2・[11](11-l2-candidates.md)）。実装: `scripts/meeting_to_candidates.py`（emh-050。構造化 JSON → 下書き + candidates。抽出自体は秘書が行う。既存の下書きは .bak に退避してから上書き。**監査ログ（§7 末尾）は後続**＝emh-055）
 - M3 タスク化: §7
 
 ## 7. candidates への流し方（`candidates.json` 形式）
@@ -90,7 +90,7 @@ held_on: 2026-10-05
 | `suggested_due` | `due_raw` が `YYYY-MM-DD` のときだけ。「来週水曜まで」等は null |
 
 - EM 以外のアクション・`low`・`decision`・`open_question` は流さない（EM が確定するのは自分のタスクだけ）
-- 書き込みは 13 §9 と同じ（アトミック書込・更新前の退避・型不正は理由つき拒否・既出 `source_ref` の再提案なし）。実装は `scripts/slack_to_candidates.py` の入力検証・書込処理を共通化して流用する想定（後続・emh-037 の試作）
+- 書き込みは 13 §9 と同じ（アトミック書込・更新前の退避・型不正は理由つき拒否・既出 `source_ref` の再提案なし）。実装は `scripts/meeting_to_candidates.py`（`slack_to_candidates.py` の検証・書込処理を流用。退避ファイルは `candidates.json.pre-meeting.bak`。監査ログ行は未実装）
 - 監査: `data/audit/` に `{event:"meeting_ingest", file, items:{decision:n,…}, excluded:n, skipped}` を 1 行（本文・引用は入れない）
 
 ## 8. 検証
