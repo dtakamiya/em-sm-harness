@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Jira キャッシュ（06 準拠）から更新なし日数とスコープ変動を数える。読み取り専用・stdlib のみ・外部接続なし。
 
-設計: docs/design/22-jira-metrics-catalog.md §2.1・§2.3。事実の数だけを出す。評価語・原因の推測・担当者情報は出さない。
+設計: docs/design/22-jira-metrics-catalog.md §2.1・§2.3・§2.6（進捗）。事実の数だけを出す。評価語・原因の推測・担当者情報は出さない。
 
 【試作・架空サンプル専用】実キャッシュ（実プロジェクトの data/jira-cache）は渡さない。委任ラダー L1 では実データを扱わない。
 """
@@ -73,6 +73,14 @@ def scope_change(issues, sprint, grace=SCOPE_GRACE_BDAYS):
     return {name: {"added": added, "removed": removed, "carried": carried}}[name]
 
 
+def progress(issues, sprint):
+    """現スプリントの完了 SP と残 SP（done 以外）。SP null は除外して件数を返す。計画値・達成率は出さない（22 §2.2⑤）。"""
+    members = [i for i in issues if any(s["id"] == sprint["id"] for s in i.get("sprints", []))]
+    done_points, done_unknown = _sum_points([i for i in members if i["status_category"] == "done"])
+    open_points, open_unknown = _sum_points([i for i in members if i["status_category"] != "done"])
+    return {"done": done_points, "remaining": open_points, "unestimated": done_unknown + open_unknown}
+
+
 def _scope_line(label, group):
     points, unknown = _sum_points(group)
     tail = f"（SP なし {unknown} 件は除外）" if unknown else ""
@@ -95,9 +103,13 @@ def build_report(cache):
                      f" {STALE_BDAYS} 営業日以上更新なし（{keys}）")
     sprint = active_sprint(issues)
     if sprint is None:
+        lines.append("- 進捗: active なスプリントがないため数えない")
         lines.append("- スコープ: active なスプリントがないため数えない")
     else:
         sc = scope_change(issues, sprint)
+        pg = progress(issues, sprint)
+        tail = f"（SP 未見積もり {pg['unestimated']} 件は除外）" if pg["unestimated"] else ""
+        lines.append(f"- 進捗（{sprint['name']}）: 完了 {pg['done']} SP / 残 {pg['remaining']} SP{tail}")
         lines += [f"- スコープ（{sprint['name']}）: " + _scope_line("開始後に追加", sc["added"]),
                   "  " + _scope_line("除外", sc["removed"]),
                   "  " + _scope_line("繰り越し", sc["carried"])]

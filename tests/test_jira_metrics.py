@@ -56,6 +56,53 @@ class ScopeChangeTest(unittest.TestCase):
         self.assertNotIn("EX-107", [i["key"] for i in sc["added"]])
 
 
+class ProgressTest(unittest.TestCase):
+    def test_sums_done_and_remaining_points_of_active_sprint_and_counts_unestimated(self):
+        # Arrange
+        issues = _cache()["issues"]
+        sprint = jm.active_sprint(issues)
+        members = [i for i in issues if any(s["id"] == sprint["id"] for s in i["sprints"])]
+        expected_done = sum(i["story_points"] or 0 for i in members if i["status_category"] == "done")
+        expected_open = sum(i["story_points"] or 0 for i in members if i["status_category"] != "done")
+        expected_null = sum(1 for i in members if i["story_points"] is None)
+        # Act
+        result = jm.progress(issues, sprint)
+        # Assert
+        self.assertEqual(result, {"done": expected_done, "remaining": expected_open, "unestimated": expected_null})
+
+    def test_null_points_are_not_counted_as_zero_and_issues_outside_sprint_are_ignored(self):
+        # Arrange
+        sprint = {"id": 11}
+        issues = [
+            {"status_category": "done", "story_points": 3, "sprints": [{"id": 11}]},
+            {"status_category": "indeterminate", "story_points": 0, "sprints": [{"id": 11}]},
+            {"status_category": "new", "story_points": None, "sprints": [{"id": 11}]},
+            {"status_category": "done", "story_points": 8, "sprints": [{"id": 10}]},
+        ]
+        # Act / Assert
+        self.assertEqual(jm.progress(issues, sprint), {"done": 3, "remaining": 0, "unestimated": 1})
+
+    def test_report_shows_progress_line_without_plan_or_rate(self):
+        # Act
+        out = jm.build_report(_cache())
+        # Assert
+        self.assertRegex(out, r"進捗（Sprint 11）: 完了 \d+ SP / 残 \d+ SP")
+        for word in ("達成率", "計画", "%"):
+            self.assertNotIn(word, out.split("進捗")[1].split("\n")[0])
+
+
+class ReportNoActiveSprintTest(unittest.TestCase):
+    def test_progress_line_says_not_counted_when_no_active_sprint(self):
+        # Arrange
+        cache = _cache()
+        for issue in cache["issues"]:
+            issue["sprints"] = []
+        # Act
+        out = jm.build_report(cache)
+        # Assert
+        self.assertIn("- 進捗: active なスプリントがないため数えない", out)
+
+
 class ReportTest(unittest.TestCase):
     def test_incomplete_cache_reports_refetch_only(self):
         self.assertEqual(jm.build_report(_cache("jira-cache.incomplete.json")), jm.REFETCH_MESSAGE)
