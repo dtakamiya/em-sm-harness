@@ -1,0 +1,3 @@
+{"version": 1, "tasks": [
+ {"id": "t-0290", "title": "アーカイブ済みの約束を確認する", "status": "done", "source": "meeting", "source_ref": "1on1-member-a-2026-09-26.md", "due": null, "blocks": [], "history": [{"at": "2026-09-26", "op": "add"}, {"at": "2026-09-29", "op": "done"}]}
+]}
