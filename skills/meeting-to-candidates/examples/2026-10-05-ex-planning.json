@@ -1,0 +1,71 @@
+{
+ "schema_version": 1,
+ "source": {
+  "file": "2026-10-05-ex-planning.md",
+  "meeting_alias": "ex-planning",
+  "held_on": "2026-10-05",
+  "line_count": 7
+ },
+ "extracted_at": "2026-10-05T18:00:00+09:00",
+ "skipped": null,
+ "items": [
+  {
+   "id": "m-01",
+   "kind": "decision",
+   "decided_by": [
+    "m_a1a1a1"
+   ],
+   "jira_keys": [
+    "EX-102"
+   ],
+   "observation": "EX-102 を次スプリントに回す、とメモにある。承認者として m_a1a1a1 が挙がっている",
+   "evidence": {
+    "line": 2,
+    "quote": "EX-102 は次スプリントに回す"
+   },
+   "confidence": "high"
+  },
+  {
+   "id": "m-02",
+   "kind": "action_item",
+   "owner": "m_b2b2b2",
+   "to_em": false,
+   "due_raw": "2026-10-09",
+   "observation": "m_b2b2b2 がデモ環境の手順書を更新する、とメモにある",
+   "evidence": {
+    "line": 4,
+    "quote": "デモ環境の手順書を 2026-10-09 までに更新"
+   },
+   "confidence": "high"
+  },
+  {
+   "id": "m-03",
+   "kind": "action_item",
+   "owner": "em",
+   "to_em": true,
+   "due_raw": "来週水曜まで",
+   "observation": "em が見積もりの前提を m_a1a1a1 に共有する、とメモにある",
+   "evidence": {
+    "line": 5,
+    "quote": "見積もりの前提を m_a1a1a1 に共有"
+   },
+   "confidence": "high"
+  },
+  {
+   "id": "m-04",
+   "kind": "open_question",
+   "asked_of": [
+    "m_a1a1a1"
+   ],
+   "needs_em": false,
+   "observation": "デモ環境の担当が決まっておらず、m_a1a1a1 に確認中、とメモにある",
+   "evidence": {
+    "line": 7,
+    "quote": "デモ環境の担当は未定"
+   },
+   "confidence": "high"
+  }
+ ],
+ "excluded": [],
+ "notes": []
+}
