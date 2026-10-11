@@ -4,9 +4,9 @@ import json
 import sys
 import tempfile
 import unittest
-from unittest import mock
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -300,6 +300,65 @@ class WriteFailureTest(unittest.TestCase):
         self.assertIn("監査ログ", err)
         self.assertNotIn("Traceback", err)
         self.assertEqual(ws.state()["due:t-1"]["acked_level"], "中")
+
+
+class WriteFailureEdgeTest(unittest.TestCase):
+    _blocked = WriteFailureTest._blocked
+    _run = WriteFailureTest._run
+
+    def test_unreadable_state_exits_2_with_cause_instead_of_treating_as_new(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        ws.run()
+        real_read = Path.read_text
+
+        def deny_state(self, *args, **kwargs):
+            if self == ws.state_p:
+                raise PermissionError(13, "Permission denied")
+            return real_read(self, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", deny_state):
+            code, out, err = self._run(["--tasks", str(ws.tasks_p), "--jira-dir", str(ws.jira_d), "--meetings", str(ws.meet_p),
+                                        "--state", str(ws.state_p), "--today", "2026-10-07"])
+        self.assertEqual(code, ps.EXIT_BROKEN)
+        self.assertEqual(out, "")
+        self.assertIn("読めません", err)
+        self.assertIn("状態は変更していません", err)
+
+    def test_state_under_a_file_is_treated_as_missing(self):
+        ws = Workspace(self, [])
+        self.assertEqual(ps.load_state(self._blocked(ws) / "p.json"), {})
+
+    def test_backup_write_failure_keeps_old_state(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        ws.run()
+        before = ws.state_p.read_text()
+        with mock.patch.object(Path, "write_bytes", side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaises(ps.WriteFailed):
+                ps.save_state(ws.state_p, {"k": {}})
+        self.assertEqual(ws.state_p.read_text(), before)
+
+    def test_mkdir_failure_is_write_failed(self):
+        ws = Workspace(self, [])
+        with mock.patch.object(Path, "mkdir", side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaises(ps.WriteFailed):
+                ps.save_state(ws.dir / "new" / "p.json", {})
+
+    def test_non_oserror_during_dump_still_removes_tmp(self):
+        ws = Workspace(self, [])
+        ws.state_p.parent.mkdir(parents=True)
+        with self.assertRaises(TypeError):
+            ps.save_state(ws.state_p, {"k": object()})
+        self.assertEqual(list(ws.state_p.parent.glob("*.tmp")), [])
+
+    def test_fdopen_failure_closes_fd_and_removes_tmp(self):
+        ws = Workspace(self, [])
+        ws.state_p.parent.mkdir(parents=True)
+        with mock.patch.object(ps.os, "fdopen", side_effect=OSError(24, "Too many open files")), \
+                mock.patch.object(ps.os, "close", wraps=ps.os.close) as closer:
+            with self.assertRaises(ps.WriteFailed):
+                ps.save_state(ws.state_p, {})
+        closer.assert_called_once()
+        self.assertEqual(list(ws.state_p.parent.glob("*.tmp")), [])
 
 
 class MalformedInputTest(unittest.TestCase):

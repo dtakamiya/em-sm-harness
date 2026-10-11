@@ -370,8 +370,10 @@ def load_inputs(tasks_path, jira_dir, meetings_path):
 def load_state(path):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return {}  # 読めなければ全 key を新規扱い（通知が増える側に倒す）
+    except (FileNotFoundError, NotADirectoryError, json.JSONDecodeError, UnicodeDecodeError):
+        return {}  # 無い・壊れていれば全 key を新規扱い（通知が増える側に倒す）
+    except OSError as exc:  # 権限など: 原因を隠して全件新規扱いにしない
+        raise BrokenInput(f"{path} を読めません（{exc.strerror or type(exc).__name__}）")
     if not isinstance(data, dict) or not all(isinstance(v, dict) for v in data.values()):
         raise BrokenInput(f"{path} の形式が不正です")  # 読めるが形が違う: 推測で上書きしない
     return data
@@ -389,13 +391,19 @@ def save_state(path, state):
         if path.exists():
             path.with_suffix(".json.bak").write_bytes(path.read_bytes())
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        try:
+            fh = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            os.close(fd)  # fdopen が失敗すると fd が残る
+            raise
+        with fh:
             json.dump(state, fh, ensure_ascii=False, indent=1, sort_keys=True)
         os.replace(tmp, path)
     except OSError as exc:
-        if tmp:
-            Path(tmp).unlink(missing_ok=True)
         raise _write_error(path, exc) from exc
+    finally:
+        if tmp:
+            Path(tmp).unlink(missing_ok=True)  # 成功時は replace 済みで無い
 
 
 def append_audit(audit_dir, today, key, op):
