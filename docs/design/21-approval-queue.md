@@ -1,6 +1,6 @@
 # 新規コミットの検知基準と承認キュー出力テンプレ
 
-状態: 設計（emh-023）＋モック試作（emh-041。生成スクリプトのみ。入力 `data/actions` を作る元は emh-045 の `save_action.py`）。根拠は [ADR 0001](../adr/0001-delegation-policy-approval-audit.md) の残論点と [05 §2](05-approval-and-audit.md)。判定語・しきい値は仮置きで、EM の使用感で調整する。サンプルは全て架空。L1（下書きまで）。
+状態: 設計（emh-023）＋モック試作（emh-041。生成スクリプトのみ。入力 `data/actions` を作る元は emh-045 の `save_action.py`）。根拠は [ADR 0001](../adr/0001-delegation-policy-approval-audit.md) の残論点と [05 §2](05-approval-and-audit.md)。一括確認の上限・【緊急】の条件・非冪等・許可リストは Q-031〜034、見直し基準は Q-025 で回答済み（EM・2026-10-11）。判定語と個別承認の上限 5 件は初期値で開始し、他のしきい値（目安 2 分・T の 80%・`expires` 14/90 日）は仮置きのまま。サンプルは全て架空。L1（下書きまで）。
 
 ## 結論
 - 「新規コミット」＝ EM の名前で **期限・約束・割当・優先度の変更** を相手に示すこと。常に EM 本人が決める（L2 付与不可）
@@ -90,10 +90,10 @@
 - 「送った」と書かない。送信結果は次回の取り込みで自動照合（[05 §2](05-approval-and-audit.md)）
 
 ## 3. 未決事項・受け入れ基準
-- 判定語（§1）と上限 5 件（§2）は仮置き。**運用 2 週間後**に次の 2 つで見直す
+- 判定語（§1）と個別承認の上限 5 件（§2）は初期値で開始する（見直し基準は Q-025 a) で回答済み。Q-031 は一括確認の上限で別の問い）。**運用 2 週間後**に次の 2 つで見直す
   - 一括確認に入った件のうち、EM が実際に送った文面が下書きと違った（`edited`）割合（**「`⟦EM が決める⟧` を追記した割合」の代用**。誤字直しも含むため断定せず確認の入口にする。判定は送信文面の自動照合（未実装）が前提で、照合不能は分母から除く。数え方は [26](26-trial-review-metrics.md) M2）
   - 個別承認の膨らみ（上限超過で夕に回した件の頻度。多いなら上限か優先度の帯を見直す。[26](26-trial-review-metrics.md) M3）
-- EM への確認事項は [open-questions.md](open-questions.md) の Q-025 に載せた
+- EM への確認事項 [Q-025](open-questions.md) は **a) 回答済み**（EM・2026-10-11）。見直し基準は上の 2 つ。数え方の実装は [26](26-trial-review-metrics.md) 側で別項目
 - **手間削減の検証**（サンプルの「目安 2 分」は実測前の仮置き）
   - 導入前に測る: 現行の下書き確認〜送信までの朝夕それぞれの所要を 5 営業日分記録し、平日 1 日あたりの朝夕合計を T 分とする（EM の自己申告か時刻メモ）
   - 導入後に測る: キューの確認 ＋ `⟦EM が決める⟧` 欄の記入 ＋ 送信までを同じ方法で 2 週間記録する。記入負担を含めて比較する
@@ -103,7 +103,7 @@
   - キューのサンプルが文字数 900・行数 30 の上限（60 秒で読める量の代理指標。時間は測らない）に収まり、`tests/test_approval_queue.py` と `tests/test_approval_queue_script.py` が通ること
 - **モック試作**（emh-041）: `scripts/approval_queue.py --slot morning|evening` が `data/actions/*.json`（1 ファイル 1 件）から上記の 1 枚を標準出力に出し、`queue_rendered` / `queue_item`（[26 §2](26-trial-review-metrics.md)）を `data/audit/` に本文なしで追記する。Jira / Slack へは書かない。`--dry-run` で追記を止める。`data/actions` が無いときは監査行も書かない。**入力を作る元**（emh-045）: `scripts/save_action.py <入力JSON>` が上記と同じ検証（`validate_action`）に通った 1 件だけを `data/actions/<action_id>.json` に保存する。落ちたら何も書かず、同じ `action_id` は上書きしない。`expires` 省略時は今日から 14 日、90 日超は拒否（[05 §3](05-approval-and-audit.md) は「保持期間付き」とだけ定めるため日数は仮置き）。過去日の `expires` は受け付ける（保存直後に期限切れ欄へ出る。仮置き）。既知キー以外は保存しない。`--dry-run` で検証のみ。実運用の入口にはまだ載せていない
   - 入力キー: 必須 `action_id` / `kind` / `title`（50 字以内）/ `target`（30 字）/ `body`（100 字）/ `priority`（high・medium・low）、任意 `due` / `expires` / `commit_stage`（none・A・B・C）/ `em_decides`（2 件・各 60 字まで）/ `sensitive`。不正な入力は除外して stderr に出し、紙面に「除外 N 件」を出す（fail-closed）。秘密値・実ドメイン・社内固有情報らしき文字列は [19](19-check-no-leak.md) と同じパターンで弾く
-  - 仮置き（EM 判断は [Q-031〜Q-034](open-questions.md)）:
+  - EM 回答済み（[Q-031〜Q-034](open-questions.md) はすべて a)、EM・2026-10-11。試作の挙動と一致しており変更なし）:
     - 一括確認も最大 5 件。超過は翌回へ回す。監査の `carried_over`（持ち越し件数）は個別承認の超過だけ＝[26](26-trial-review-metrics.md) M3（個別承認の膨らみの指標）の定義どおり
     - `【緊急】`＝優先度 high で期限が今日以前
     - 同じ枠を 2 回出すと監査行も 2 回分たまる（冪等にしない。冪等＝同じ操作を何度しても結果が同じ）
