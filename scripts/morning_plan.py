@@ -76,21 +76,24 @@ def build_plan(tasks, candidates, today):
     }
 
 
-def split_already_shown(shown, decisions, plan):
-    """先回りの所見のうち、同じ計画の「今日やる順」「催促候補」に同じ情報が出ているものを分ける（18 §2 まとめ）。
+def already_shown_in_plan(plan):
+    """先回りの所見が、同じ計画の「今日やる順」「催促候補」に同じ情報で既出かを返す判定関数（18 §2 まとめ）。
 
-    畳むのは、所見のルールが期限接近だけで対象が今日やる順にある件と、返信待ちだけで対象が催促候補にある件。
-    ブロッカー等ほかのルールを含む件・判断依頼は、新しい情報なので畳まない。
+    畳むのは次の 3 つだけ。
+    - 期限接近だけ・段が中・対象が今日やる順にある（行に期限日が出ている）
+    - 期限接近だけ・期限超過・対象が今日やる順にある（行に「期限超過 N 日」が出て、結論行も 🔴 になる）
+    - 返信待ちだけで、対象が催促候補にある（行に待ち先と確認予定が出る。催促回数も行に足してある）
+    期限が今日の高、ブロッカー等ほかのルールを含む件は畳まない。判断依頼は呼び出し側（select）が畳まない。
     """
     top_ids = {t["id"] for t in plan["top"]}
     nudge_ids = {t["id"] for t in plan["nudges"]}
 
     def already(f):
-        if f["key"] in decisions:
-            return False
-        return (f["rules"] == ["due"] and f["ref"] in top_ids) or (f["rules"] == ["waiting"] and f["ref"] in nudge_ids)
+        if f["rules"] == ["due"] and f["ref"] in top_ids:
+            return f["level"] == "中" or f.get("gap", 0) < 0
+        return f["rules"] == ["waiting"] and f["ref"] in nudge_ids
 
-    return [f for f in shown if not already(f)], [f for f in shown if already(f)]
+    return already
 
 
 def _nudge_count(task):
@@ -168,22 +171,23 @@ def main(argv=None):
     except ValueError:
         raise SystemExit("--today の日付が不正です")
     lines, detail, new_state = (), (), None
-    if args.proactive:
-        import proactive_scan as ps
-        try:
-            shown, overflow, decisions, notes, new_state = ps.collect_with_state((args.tasks, args.jira_dir, args.meetings, args.state), today)
-        except ps.BrokenInput as exc:
-            raise SystemExit(f"先回り入力エラー: {exc}。状態は変更していません")
-        detail = ps.detail_lines(notes)
     try:
         plan = build_plan(_load(args.tasks, "tasks"), _load(args.candidates, "candidates"), today)
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise SystemExit(f"入力の形式が不正です（{type(exc).__name__}）。上書きはしません")
     if args.proactive:
+        import proactive_scan as ps
+        try:
+            shown, overflow, decisions, notes, new_state = ps.collect_with_state(
+                (args.tasks, args.jira_dir, args.meetings, args.state), today, fold=already_shown_in_plan(plan))
+        except ps.BrokenInput as exc:
+            raise SystemExit(f"先回り入力エラー: {exc}。状態は変更していません")
+        detail = ps.detail_lines(notes)
         # 判断依頼に回った返信待ちは、催促の下書き対象から外す（17 §2: 3 回目は下書きを出さない）
         asked = {f["ref"] for f in shown if f["key"] in decisions and f["rule"] == "waiting"}
         plan = {**plan, "nudges": [t for t in plan["nudges"] if t["id"] not in asked]}
-        kept, folded = split_already_shown(shown, decisions, plan)
+        kept = [f for f in shown if not f.get("folded")]
+        folded = [f for f in shown if f.get("folded")]
         lines = ps.render_section(kept, overflow, decisions, today, folded)
     output = render(plan, lines, detail, proactive=args.proactive)
     if args.proactive:

@@ -160,7 +160,8 @@ class MorningPlanProactiveTest(unittest.TestCase):
         import io
         import json
         import tempfile
-        t = {"id": "t-1", "title": "x", "status": "open", "due": "2026-10-05", "updated": "2026-10-01", "history": []}
+        t = {"id": "t-1", "title": "x", "status": "open", "due": "2026-10-05", "updated": "2026-10-01", "history": [],
+             "snooze_until": "2026-10-10"}  # 今日やる順から外れるので、先回り側で数える（畳まれない）
         with tempfile.TemporaryDirectory() as tmp:
             Path(f"{tmp}/t.json").write_text(json.dumps({"tasks": [t]}), encoding="utf-8")
             Path(f"{tmp}/c.json").write_text("[]", encoding="utf-8")  # 候補ファイルが不正 → collect の後で失敗
@@ -191,47 +192,80 @@ class FoldAlreadyShownTest(unittest.TestCase):
     """先回りの所見のうち、今日やる順・催促候補に既出のものを畳む（emh-057）。"""
     SAMPLE = ROOT / "tests" / "fixtures" / "sample-week"
 
-    def _run(self, proactive, tmp):
+    def _run(self, proactive, tmp, tasks=None, state=None):
         import contextlib
         import io
-        argv = ["--tasks", str(self.SAMPLE / "tasks/tasks.json"), "--candidates", str(self.SAMPLE / "tasks/candidates.json"),
-                "--today", "2026-10-08"]
+        argv = ["--tasks", tasks or str(self.SAMPLE / "tasks/tasks.json"),
+                "--candidates", str(self.SAMPLE / "tasks/candidates.json"), "--today", "2026-10-08"]
         if proactive:
             argv += ["--proactive", "--jira-dir", str(self.SAMPLE / "jira-cache"), "--meetings", f"{tmp}/none.json",
-                     "--state", f"{tmp}/s.json"]
+                     "--state", state or f"{tmp}/s.json"]
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             mp.main(argv)
         return buf.getvalue()
+
+    def _task(self, tid, due, **extra):
+        return {"id": tid, "title": f"title-{tid}", "status": "open", "priority": "soon", "due": due,
+                "updated": "2026-10-01", "history": [], **extra}
 
     def test_fold_shrinks_lines_but_keeps_conclusion_and_every_id(self):
         import tempfile
         with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
             out = self._run(True, a)
             base = self._run(False, b)
-        lines = out.splitlines()
-        self.assertEqual(lines[2], base.splitlines()[2])  # 結論行は変わらない
+        conclusion = next(l for l in out.splitlines() if l.startswith("🔴") or l.startswith("🟡") or l.startswith("🟢"))
+        self.assertIn(conclusion, base)  # 結論行は畳んでも変わらない
         section = out[out.index("## 先回り"):out.index("## 詳細")]
-        self.assertNotIn("`due:t-0004`", section)
-        self.assertNotIn("`due:t-0001`", section)
-        self.assertNotIn("`waiting:t-0002`", section)
+        for key in ("`due:t-0004`", "`due:t-0001`", "`waiting:t-0002`"):
+            self.assertNotIn(key, section)
         self.assertIn("既出のため畳んだ件: t-0004・t-0001・t-0002", section)
         self.assertIn("`blocker:EX-103`", section)  # 新しい情報は畳まない
-        for tid in ("t-0004", "t-0001", "t-0002"):  # 見落としなし: 畳んだ件は上の節に必ず残る
-            self.assertIn(tid, out[:out.index("## 先回り")])
-        self.assertIn("催促 0 回済み", out)
+        before = out[:out.index("## 先回り")]
+        for tid in ("t-0004", "t-0001", "t-0002"):  # 見落としなし: 畳んだ件は上の節に残る
+            self.assertIn(tid, before)
+        self.assertIn("期限超過 1 日", before)  # 畳んだ所見の事実が上の行に同じ内容で出ている
+        self.assertIn("催促 0 回済み", before)
 
-    def test_split_keeps_multi_rule_decision_and_not_listed_findings(self):
-        plan = {"top": [{"id": "t-1"}], "nudges": [{"id": "t-2"}]}
-        due = {"key": "due:t-1", "ref": "t-1", "rules": ["due"]}
-        both = {"key": "due:t-1", "ref": "t-1", "rules": ["due", "blocker"]}
-        not_top = {"key": "due:t-9", "ref": "t-9", "rules": ["due"]}
-        waiting = {"key": "waiting:t-2", "ref": "t-2", "rules": ["waiting"]}
-        asked = {"key": "waiting:t-2", "ref": "t-2", "rules": ["waiting"]}
-        self.assertEqual(mp.split_already_shown([due, waiting], set(), plan), ([], [due, waiting]))
-        self.assertEqual(mp.split_already_shown([both], set(), plan), ([both], []))
-        self.assertEqual(mp.split_already_shown([not_top], set(), plan), ([not_top], []))
-        self.assertEqual(mp.split_already_shown([asked], {"waiting:t-2"}, plan), ([asked], []))
+    def test_folded_findings_do_not_push_new_information_into_overflow(self):
+        import json
+        import tempfile
+        # 今日やる順に出る中の期限接近が 5 件（畳まれる）＋ スヌーズで今日やる順に出ない期限接近が 1 件
+        tasks = [self._task(f"t-{i}", "2026-10-10") for i in range(1, 6)]
+        tasks.append(self._task("t-9", "2026-10-09", snooze_until="2026-10-20", priority="now"))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/t.json"
+            Path(path).write_text(json.dumps({"tasks": tasks}), encoding="utf-8")
+            out = self._run(True, tmp, tasks=path)
+        section = out[out.index("## 先回り"):out.index("## 詳細")]
+        self.assertIn("`due:t-9`", section)  # 畳まれる 5 件が枠を使わないので、押し出されない
+        self.assertNotIn("ほか", section)
+
+    def test_folded_findings_are_not_counted_as_shown(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path, state = f"{tmp}/t.json", f"{tmp}/s.json"
+            Path(path).write_text(json.dumps({"tasks": [self._task("t-1", "2026-10-10")]}), encoding="utf-8")
+            self._run(True, tmp, tasks=path, state=state)
+            self.assertNotIn("due:t-1", json.loads(Path(state).read_text()))  # 畳んだ件は回数・最終表示日を持たない
+            # 今日やる順から外れた翌日は、2 営業日の抑止を受けずに先回りへ出る
+            Path(path).write_text(json.dumps({"tasks": [self._task("t-1", "2026-10-10", snooze_until="2026-10-20")]}),
+                                  encoding="utf-8")
+            out = self._run(True, tmp, tasks=path, state=state)
+        self.assertIn("`due:t-1`", out)
+
+    def test_already_shown_predicate_keeps_high_today_multi_rule_and_unlisted(self):
+        plan = {"top": [{"id": "t-1"}, {"id": "t-3"}, {"id": "t-4"}], "nudges": [{"id": "t-2"}]}
+        already = mp.already_shown_in_plan(plan)
+        mid = {"ref": "t-1", "rules": ["due"], "level": "中", "gap": 2}
+        overdue = {"ref": "t-3", "rules": ["due"], "level": "高", "gap": -1}
+        today_high = {"ref": "t-4", "rules": ["due"], "level": "高", "gap": 0}
+        both = {"ref": "t-1", "rules": ["due", "blocker"], "level": "中", "gap": 2}
+        not_top = {"ref": "t-9", "rules": ["due"], "level": "中", "gap": 2}
+        waiting = {"ref": "t-2", "rules": ["waiting"], "level": "中"}
+        self.assertTrue(all(already(f) for f in (mid, overdue, waiting)))
+        self.assertFalse(any(already(f) for f in (today_high, both, not_top)))
 
     def test_all_folded_does_not_say_nothing_to_do(self):
         import proactive_scan as ps
