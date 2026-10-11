@@ -95,6 +95,30 @@ class EveningWrapupTest(unittest.TestCase):
         self.assertIn("🟢 順調", out)
         self.assertIn("対応不要", out)
 
+    def test_has_report_only_for_carry_new_waiting_or_defer_ask(self):
+        # Q-029 b): 持ち越し・新しい返信待ち・判断依頼のある日だけ出す
+        self.assertTrue(ew.has_report(self.w))
+        self.assertFalse(ew.has_report(ew.build_wrapup([], TODAY)))
+        done_only = [{"id": "t-0199", "title": "x", "status": "done",
+                      "history": [{"at": "2026-10-05", "op": "done"}]}]
+        self.assertFalse(ew.has_report(ew.build_wrapup(done_only, TODAY)))
+
+    def test_has_report_true_for_new_waiting_alone(self):
+        tasks = [self._waiting("t-0200", next_check="2026-10-09",
+                               history=[{"at": "2026-10-05", "op": "wait"}])]
+        self.assertTrue(ew.has_report(ew.build_wrapup(tasks, TODAY)))
+
+    def test_quiet_day_prints_one_line_unless_always(self):
+        quiet = ew.render_for_day(ew.build_wrapup([], TODAY), always=False)
+        self.assertEqual(quiet.count("\n"), 1)
+        self.assertIn("出す内容なし", quiet)
+        self.assertNotIn("## 詳細", quiet)
+        full = ew.render_for_day(ew.build_wrapup([], TODAY), always=True)
+        self.assertIn("対応不要", full)
+
+    def test_busy_day_prints_full_report_by_default(self):
+        self.assertEqual(ew.render_for_day(self.w, always=False), ew.render(self.w))
+
     def test_render_matches_expected_sample_and_stays_short(self):
         out = ew.render(self.w)
         self.assertEqual(out, (SAMPLE / "expected-output.md").read_text(encoding="utf-8"))
