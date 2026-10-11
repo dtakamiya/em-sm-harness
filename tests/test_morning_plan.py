@@ -144,6 +144,22 @@ class MorningPlanProactiveTest(unittest.TestCase):
         self.assertNotIn("返信待ちの催促候補", out)
         self.assertIn("判断依頼", out)
 
+    def test_proactive_with_unwritable_state_exits_with_cause_and_prints_nothing(self):
+        import contextlib
+        import io
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks = f"{tmp}/t.json"
+            Path(tasks).write_text(json.dumps({"tasks": []}), encoding="utf-8")
+            Path(f"{tmp}/blocker").write_text("x")
+            buf, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+                mp.main(["--tasks", tasks, "--candidates", f"{tmp}/c.json", "--today", "2026-10-04", "--proactive",
+                         "--jira-dir", f"{tmp}/j", "--meetings", f"{tmp}/m.json", "--state", f"{tmp}/blocker/s.json"])
+        self.assertEqual(buf.getvalue(), "")
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("状態は更新していません", err.getvalue())
+
     def _run_with(self, tasks_text):
         import contextlib
         import io
