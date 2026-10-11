@@ -107,6 +107,24 @@ class MorningPlanProactiveTest(unittest.TestCase):
         self.assertIn("## 先回り（観察）", outs[1])
         self.assertLess(outs[1].index("## 先回り"), outs[1].index("## 詳細"))
 
+    def test_detail_does_not_claim_jira_unreflected_when_proactive_reads_jira(self):
+        import contextlib
+        import io
+        import tempfile
+        argv = ["--tasks", str(SAMPLES / "tasks.sample.json"), "--candidates", str(SAMPLES / "candidates.sample.json"),
+                "--today", "2026-10-04"]
+        with tempfile.TemporaryDirectory() as tmp:
+            extra = ["--proactive", "--jira-dir", f"{tmp}/jira", "--meetings", f"{tmp}/none.json", "--state", f"{tmp}/s.json"]
+            outs = []
+            for flags in ([], extra):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    mp.main(argv + flags)
+                outs.append(buf.getvalue())
+        self.assertIn("会議準備・Jira・Confluence は入力未接続のため未反映", outs[0])
+        self.assertNotIn("Jira・Confluence は入力未接続", outs[1])
+        self.assertIn("Confluence は入力未接続のため未反映", outs[1])
+
     def test_waiting_task_with_two_nudges_is_decision_only_not_draft_target(self):
         import contextlib
         import io

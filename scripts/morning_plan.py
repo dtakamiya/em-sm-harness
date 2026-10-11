@@ -89,7 +89,7 @@ def _line(task, today):
     return f"{task['id']} {task['title']}{tail}"
 
 
-def render(plan, proactive_lines=(), detail_extra=()):
+def render(plan, proactive_lines=(), detail_extra=(), proactive=False):
     today = plan["today"]
     if plan["overdue"]:
         status, head = "🔴 要対応", f"期限超過 {len(plan['overdue'])} 件"
@@ -123,7 +123,10 @@ def render(plan, proactive_lines=(), detail_extra=()):
             out.append(f"- ほか {plan['candidate_overflow']} 件")
     if proactive_lines:
         out += ["", *proactive_lines]
-    out += ["", "## 詳細", *detail_extra, "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）",
+    # --proactive のときは Jira・会議の入力有無を上の detail_extra が示す。固定文で「Jira 未反映」と言い切らない
+    unreflected = ("- Confluence は入力未接続のため未反映（Jira・会議の入力有無は上の行のとおり）" if proactive
+                   else "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）")
+    out += ["", "## 詳細", *detail_extra, unreflected,
             "- 並べ順は暫定: 期限超過 → 今日 → 3日以内 → 優先度 now/soon/later → 他を止めている数 → 期限順"]
     return "\n".join(out) + "\n"
 
@@ -158,7 +161,7 @@ def main(argv=None):
         # 判断依頼に回った返信待ちは、催促の下書き対象から外す（17 §2: 3 回目は下書きを出さない）
         asked = {f["ref"] for f in shown if f["key"] in decisions and f["rule"] == "waiting"}
         plan = {**plan, "nudges": [t for t in plan["nudges"] if t["id"] not in asked]}
-    output = render(plan, lines, detail)
+    output = render(plan, lines, detail, proactive=args.proactive)
     if args.proactive:
         ps.save_state(args.state, new_state)  # 出力が組み立てられた後にだけ保存する
     sys.stdout.write(output)

@@ -1,6 +1,6 @@
 # 朝の「今日の計画」（試作の仕様）
 
-状態: 試作（emh-007）。tasks と候補だけで動く。Jira・Confluence・会議は入力未接続。サンプルは全て架空。
+状態: 試作（emh-007）。tasks と候補だけで動く。Confluence は入力未接続。Jira・会議は `--proactive` のときだけ読む（入力があれば反映、無ければ詳細に「入力なし」と出す）。サンプルは全て架空。
 
 ## 結論
 - 着手順 1 位（[12](12-secretary-job-list.md) §4）を、実接続なしで動く形にした: `skills/morning-plan/SKILL.md` + `scripts/morning_plan.py`
