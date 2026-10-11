@@ -186,15 +186,19 @@ def _entry_visible(entry, f, today, digest):
     return True, entry.get("shown_count", 0) >= PROMOTE_AFTER_SHOWS
 
 
-def select(findings, tasks, state, today, digest=False):
-    """表示対象を決める。戻り値: (表示する所見, 超過件数, 判断依頼の key 集合)。高は抑止しない。"""
+def select(findings, tasks, state, today, digest=False, fold=None):
+    """表示対象を決める。戻り値: (表示する所見, 超過件数, 判断依頼の key 集合)。高は抑止しない。
+
+    fold(f) が真の所見（同じ計画の別の節に既出）は、上限 5 件・催促 3 件の枠を使わず、`folded: True` を付けて末尾に足す。
+    判断依頼は畳まない。
+    """
     touched = {t["id"] for t in tasks if t["status"] in ("done", "dropped")}
     prev = today - timedelta(days=1)
     while prev.weekday() >= 5:
         prev -= timedelta(days=1)
     touched_recently = {t["id"] for t in tasks if _day(t["updated"]) >= prev}
     wanted = [f for f in findings if (f["level"] == "低") == digest]
-    shown, decisions = [], set()
+    shown, folded, decisions = [], [], set()
     for f in wanted:
         if f["ref"] in touched or (f["level"] != "高" and f["ref"] in touched_recently):
             continue
@@ -203,10 +207,15 @@ def select(findings, tasks, state, today, digest=False):
             visible, decision = not _muted(entry, f, today), False
         else:
             visible, decision = _entry_visible(entry, f, today, digest)
-        if visible:
-            shown.append(f)
-            if decision or f.get("decision"):
-                decisions.add(f["key"])
+        if not visible:
+            continue
+        is_decision = decision or f.get("decision")
+        if fold and not is_decision and fold(f):
+            folded.append({**f, "folded": True})
+            continue
+        shown.append(f)
+        if is_decision:
+            decisions.add(f["key"])
     nudges, picked = 0, []
     for f in shown:
         if f.get("nudge"):
@@ -215,7 +224,7 @@ def select(findings, tasks, state, today, digest=False):
             nudges += 1
         picked.append(f)
     top = picked[:MAX_SHOWN]
-    return top, len(shown) - len(top), decisions
+    return top + folded, len(shown) - len(top), decisions
 
 
 def update_state(state, shown, decisions, today):
@@ -223,6 +232,8 @@ def update_state(state, shown, decisions, today):
     new = {k: dict(v) for k, v in state.items()}
     iso = today.isoformat()
     for f in shown:
+        if f.get("folded"):
+            continue  # 畳んだ件は表示回数に数えない（上の節から外れたら通常どおり先回りに出る）
         old = new.get(f["key"])
         if old and old.get("level") == f["level"]:
             entry = dict(old)
@@ -386,16 +397,18 @@ def detail_lines(notes):
     return [f"- {n}" for n in notes]
 
 
-def render_section(shown, overflow, decisions, today):
-    """朝の計画に載せる「先回り」節（見出しを含む）。"""
+def render_section(shown, overflow, decisions, today, folded=()):
+    """朝の計画に載せる「先回り」節（見出しを含む）。folded = 同じ朝の計画の別の節に既出で、畳んだ所見。"""
     out = ["## 先回り（観察）"]
-    if not shown:
+    if not shown and not folded:
         out.append("- 先回り対応不要")
     for f in shown:
         if f["key"] in decisions:
             continue
         rules = "・".join(RULE_LABELS[r] for r in f["rules"]) if len(f["rules"]) > 1 else ""
         out.append(f"- [{f['level']}] {f['ref']} {f.get('title', '')} {f['fact']}".replace("  ", " ") + (f"（{rules}）" if rules else "") + f" `{f['key']}`")
+    if folded:
+        out.append("- 既出のため畳んだ件: " + "・".join(f["ref"] for f in folded) + "（上の節のとおり）")
     if overflow:
         out.append(f"- ほか {overflow} 件")
     asks = [f for f in shown if f["key"] in decisions]
@@ -421,7 +434,7 @@ def render(shown, overflow, decisions, today, notes=()):
     return "\n".join([f"# 先回り {today.isoformat()}", "", head, "", f"**EM がやること**: {todo}", ""] + body + detail) + "\n"
 
 
-def collect_with_state(args_paths, today, digest=False):
+def collect_with_state(args_paths, today, digest=False, fold=None):
     """スキャン〜絞り込みまで（保存はしない）。戻り値: (shown, overflow, decisions, notes, new_state)。破損は BrokenInput。"""
     tasks_p, jira_d, meet_p, state_p = args_paths
     tasks, issues, fetched, meetings = load_inputs(tasks_p, jira_d, meet_p)
@@ -437,7 +450,7 @@ def collect_with_state(args_paths, today, digest=False):
         notes.append("会議一覧: 入力なし（会議準備は未判定）")
     findings = scan(tasks, issues, meetings, today)
     state = load_state(state_p)
-    shown, overflow, decisions = select(findings, tasks, state, today, digest)
+    shown, overflow, decisions = select(findings, tasks, state, today, digest, fold)
     new_state = prune_state(update_state(state, shown, decisions, today), {f["key"] for f in findings}, today)
     return shown, overflow, decisions, notes, new_state
 
