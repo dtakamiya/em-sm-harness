@@ -104,12 +104,28 @@ def render(w):
     return "\n".join(out) + "\n"
 
 
+def has_report(w):
+    """Q-029 b): 持ち越し・新しい返信待ち・判断依頼のある日だけ全文を出す。"""
+    return bool(w["carry"] or w["new_waiting"] or w["defer_asks"])
+
+
+def _quiet_line(w):
+    parts = [f"{label} {len(w[key])} 件" for label, key in (("確認予定超過", "nudge_due"), ("今日先送り", "deferred")) if w[key]]
+    tail = f"。{'・'.join(parts)}は明朝の計画へ" if parts else ""
+    return f"夕方の締め {w['today'].isoformat()}: 🟢 対応不要（出す内容なし{tail}）\n"
+
+
+def render_for_day(w, always):
+    return render(w) if always or has_report(w) else _quiet_line(w)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="夕方の締めレポートを生成する（読み取り専用）")
     ap.add_argument("--tasks", default="data/tasks/tasks.json")
     ap.add_argument("--today", default=date.today().isoformat())
+    ap.add_argument("--always", action="store_true", help="出す内容がない日も全文を出す")
     args = ap.parse_args(argv)
-    sys.stdout.write(render(build_wrapup(_load(args.tasks, "tasks"), _day(args.today))))
+    sys.stdout.write(render_for_day(build_wrapup(_load(args.tasks, "tasks"), _day(args.today)), args.always))
 
 
 if __name__ == "__main__":
