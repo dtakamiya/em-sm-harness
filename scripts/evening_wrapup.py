@@ -109,10 +109,14 @@ def has_report(w):
     return bool(w["carry"] or w["new_waiting"] or w["defer_asks"])
 
 
+def _quiet_line(w):
+    parts = [f"{label} {len(w[key])} 件" for label, key in (("確認予定超過", "nudge_due"), ("今日先送り", "deferred")) if w[key]]
+    tail = f"。{'・'.join(parts)}は明朝の計画へ" if parts else ""
+    return f"夕方の締め {w['today'].isoformat()}: 🟢 対応不要（出す内容なし{tail}）\n"
+
+
 def render_for_day(w, always):
-    if always or has_report(w):
-        return render(w)
-    return f"夕方の締め {w['today'].isoformat()}: 出す内容なし（持ち越し・新しい返信待ち・判断依頼なし）\n"
+    return render(w) if always or has_report(w) else _quiet_line(w)
 
 
 def main(argv=None):

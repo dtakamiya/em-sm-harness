@@ -111,10 +111,37 @@ class EveningWrapupTest(unittest.TestCase):
     def test_quiet_day_prints_one_line_unless_always(self):
         quiet = ew.render_for_day(ew.build_wrapup([], TODAY), always=False)
         self.assertEqual(quiet.count("\n"), 1)
+        self.assertIn("🟢 対応不要", quiet)
         self.assertIn("出す内容なし", quiet)
+        self.assertNotIn("明朝", quiet)
         self.assertNotIn("## 詳細", quiet)
         full = ew.render_for_day(ew.build_wrapup([], TODAY), always=True)
         self.assertIn("対応不要", full)
+
+    def test_deferred_only_and_overdue_check_only_days_are_one_line_with_counts(self):
+        deferred = {"id": "t-0301", "title": "x", "status": "open", "due": "2026-10-20",
+                    "history": [{"at": "2026-10-05", "op": "defer"}]}
+        out = ew.render_for_day(ew.build_wrapup([deferred], TODAY), always=False)
+        self.assertEqual(out.count("\n"), 1)
+        self.assertIn("今日先送り 1 件は明朝の計画へ", out)
+        self.assertNotIn("確認予定超過", out)
+        overdue = self._waiting("t-0302", next_check="2026-10-01")
+        out = ew.render_for_day(ew.build_wrapup([overdue], TODAY), always=False)
+        self.assertEqual(out.count("\n"), 1)
+        self.assertIn("確認予定超過 1 件は明朝の計画へ", out)
+        self.assertNotIn("今日先送り", out)
+
+    def test_main_wires_always_flag(self):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ew.main(["--tasks", "/nonexistent/tasks.json", "--today", "2026-10-05"])
+        self.assertEqual(buf.getvalue().count("\n"), 1)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ew.main(["--tasks", "/nonexistent/tasks.json", "--today", "2026-10-05", "--always"])
+        self.assertIn("## 詳細", buf.getvalue())
 
     def test_busy_day_prints_full_report_by_default(self):
         self.assertEqual(ew.render_for_day(self.w, always=False), ew.render(self.w))
