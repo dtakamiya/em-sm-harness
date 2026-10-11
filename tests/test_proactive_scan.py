@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import date
 from pathlib import Path
 
@@ -240,6 +241,65 @@ class SafetyTest(unittest.TestCase):
         quiet_main(["--state", str(ws.state_p), "--audit-dir", str(audit), "--today", "2026-10-07", "--ack", "due:t-1"])
         rows = [json.loads(line) for line in (audit / "2026-10-07.jsonl").read_text().splitlines()]
         self.assertEqual(rows, [{"at": "2026-10-07", "op": "ack", "key": "due:t-1"}])
+
+
+class WriteFailureTest(unittest.TestCase):
+    """状態・監査ファイルに書けないときは traceback でなく、原因つき 1 行で exit 2。"""
+
+    def _blocked(self, ws):
+        blocker = ws.dir / "blocker"
+        blocker.write_text("x")  # ファイルを親ディレクトリ扱いさせて書込失敗を作る（権限に依存しない）
+        return blocker
+
+    def _run(self, argv):
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(err):
+            code = ps.main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_scan_with_unwritable_state_exits_2_with_cause_and_no_report(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        blocked = self._blocked(ws)
+        code, out, err = self._run(["--tasks", str(ws.tasks_p), "--jira-dir", str(ws.jira_d), "--meetings", str(ws.meet_p),
+                                    "--state", str(blocked / "p.json"), "--today", "2026-10-07"])
+        self.assertEqual(code, ps.EXIT_BROKEN)
+        self.assertEqual(out, "")
+        self.assertIn("書き込めません", err)
+        self.assertIn("状態は更新していません", err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(len(err.strip().splitlines()), 1)
+
+    def test_failed_replace_leaves_old_state_and_no_tmp_file(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        ws.run()
+        before = ws.state_p.read_text()
+        with mock.patch.object(ps.os, "replace", side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaises(ps.WriteFailed):
+                ps.save_state(ws.state_p, {"k": {}})
+        self.assertEqual(ws.state_p.read_text(), before)
+        self.assertEqual(list(ws.state_p.parent.glob("*.tmp")), [])
+
+    def test_ack_with_unwritable_state_exits_2_and_says_not_updated(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        ws.run()
+        with mock.patch.object(ps, "save_state", side_effect=ps.WriteFailed("p に書き込めません（x）")):
+            code, _, err = self._run(["--state", str(ws.state_p), "--audit-dir", str(ws.dir / "a"),
+                                      "--today", "2026-10-07", "--ack", "due:t-1"])
+        self.assertEqual(code, ps.EXIT_BROKEN)
+        self.assertIn("状態は更新していません", err)
+        self.assertFalse((ws.dir / "a").exists())
+
+    def test_ack_with_unwritable_audit_says_state_updated_but_audit_missing(self):
+        ws = Workspace(self, [task("t-1", due="2026-10-09")])
+        ws.run()
+        blocked = self._blocked(ws)
+        code, _, err = self._run(["--state", str(ws.state_p), "--audit-dir", str(blocked / "a"),
+                                  "--today", "2026-10-07", "--ack", "due:t-1"])
+        self.assertEqual(code, ps.EXIT_BROKEN)
+        self.assertIn("状態は更新済み", err)
+        self.assertIn("監査ログ", err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(ws.state()["due:t-1"]["acked_level"], "中")
 
 
 class MalformedInputTest(unittest.TestCase):

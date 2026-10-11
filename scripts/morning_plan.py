@@ -191,7 +191,10 @@ def main(argv=None):
         lines = ps.render_section(kept, overflow, decisions, today, folded)
     output = render(plan, lines, detail, proactive=args.proactive)
     if args.proactive:
-        ps.save_state(args.state, new_state)  # 出力が組み立てられた後にだけ保存する
+        try:
+            ps.save_state(args.state, new_state)  # 出力が組み立てられた後にだけ保存する
+        except ps.WriteFailed as exc:
+            raise SystemExit(f"先回りの書き込みエラー: {exc}。状態は更新していません（朝の計画は出力していません）")
     sys.stdout.write(output)
 
 

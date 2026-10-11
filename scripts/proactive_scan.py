@@ -35,6 +35,10 @@ class BrokenInput(Exception):
     pass
 
 
+class WriteFailed(Exception):
+    """状態・監査ファイルに書けなかった（権限・存在しない親・容量など）。"""
+
+
 def _day(value):
     return date.fromisoformat(str(value)[:10]) if value else None
 
@@ -366,29 +370,43 @@ def load_inputs(tasks_path, jira_dir, meetings_path):
 def load_state(path):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return {}  # 読めなければ全 key を新規扱い（通知が増える側に倒す）
     if not isinstance(data, dict) or not all(isinstance(v, dict) for v in data.values()):
         raise BrokenInput(f"{path} の形式が不正です")  # 読めるが形が違う: 推測で上書きしない
     return data
 
 
+def _write_error(path, exc):
+    return WriteFailed(f"{path} に書き込めません（{exc.strerror or type(exc).__name__}）")
+
+
 def save_state(path, state):
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        path.with_suffix(".json.bak").write_bytes(path.read_bytes())
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(state, fh, ensure_ascii=False, indent=1, sort_keys=True)
-    os.replace(tmp, path)
+    tmp = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            path.with_suffix(".json.bak").write_bytes(path.read_bytes())
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=1, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError as exc:
+        if tmp:
+            Path(tmp).unlink(missing_ok=True)
+        raise _write_error(path, exc) from exc
 
 
 def append_audit(audit_dir, today, key, op):
-    Path(audit_dir).mkdir(parents=True, exist_ok=True)
     row = {"at": today.isoformat(), "op": op, "key": key}
-    with (Path(audit_dir) / f"{today.isoformat()}.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    target = Path(audit_dir) / f"{today.isoformat()}.jsonl"
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise _write_error(target, exc) from exc
 
 
 # ---- 出力 ----
@@ -494,7 +512,14 @@ def main(argv=None):
         except KeyError:
             sys.stderr.write(f"key {key} は状態にありません\n")
             return EXIT_BROKEN
-        append_audit(args.audit_dir, today, key, "snooze" if args.snooze else "ack")
+        except WriteFailed as exc:
+            sys.stderr.write(f"書き込みエラー: {exc}。状態は更新していません\n")
+            return EXIT_BROKEN
+        try:
+            append_audit(args.audit_dir, today, key, "snooze" if args.snooze else "ack")
+        except WriteFailed as exc:
+            sys.stderr.write(f"書き込みエラー: {exc}。状態は更新済みですが、監査ログが残っていません\n")
+            return EXIT_BROKEN
         sys.stdout.write(f"{key} を{'スヌーズ' if args.snooze else '既読'}にしました\n")
         return EXIT_NONE
     try:
@@ -502,6 +527,9 @@ def main(argv=None):
             (args.tasks, args.jira_dir, args.meetings, args.state), today, args.digest)
     except BrokenInput as exc:
         sys.stderr.write(f"入力エラー: {exc}。状態は変更していません\n")
+        return EXIT_BROKEN
+    except WriteFailed as exc:
+        sys.stderr.write(f"書き込みエラー: {exc}。状態は更新していません\n")
         return EXIT_BROKEN
     sys.stdout.write(render(shown, overflow, decisions, today, notes))
     return EXIT_NOTIFY if shown else EXIT_NONE
