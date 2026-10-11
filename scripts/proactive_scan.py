@@ -386,16 +386,18 @@ def detail_lines(notes):
     return [f"- {n}" for n in notes]
 
 
-def render_section(shown, overflow, decisions, today):
-    """朝の計画に載せる「先回り」節（見出しを含む）。"""
+def render_section(shown, overflow, decisions, today, folded=()):
+    """朝の計画に載せる「先回り」節（見出しを含む）。folded = 同じ朝の計画の別の節に既出で、畳んだ所見。"""
     out = ["## 先回り（観察）"]
-    if not shown:
+    if not shown and not folded:
         out.append("- 先回り対応不要")
     for f in shown:
         if f["key"] in decisions:
             continue
         rules = "・".join(RULE_LABELS[r] for r in f["rules"]) if len(f["rules"]) > 1 else ""
         out.append(f"- [{f['level']}] {f['ref']} {f.get('title', '')} {f['fact']}".replace("  ", " ") + (f"（{rules}）" if rules else "") + f" `{f['key']}`")
+    if folded:
+        out.append("- 既出のため畳んだ件: " + "・".join(f["ref"] for f in folded) + "（上の節のとおり）")
     if overflow:
         out.append(f"- ほか {overflow} 件")
     asks = [f for f in shown if f["key"] in decisions]

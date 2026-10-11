@@ -187,5 +187,59 @@ class MorningPlanProactiveTest(unittest.TestCase):
             self.assertIsInstance(cm.exception.code, str)
 
 
+class FoldAlreadyShownTest(unittest.TestCase):
+    """先回りの所見のうち、今日やる順・催促候補に既出のものを畳む（emh-057）。"""
+    SAMPLE = ROOT / "tests" / "fixtures" / "sample-week"
+
+    def _run(self, proactive, tmp):
+        import contextlib
+        import io
+        argv = ["--tasks", str(self.SAMPLE / "tasks/tasks.json"), "--candidates", str(self.SAMPLE / "tasks/candidates.json"),
+                "--today", "2026-10-08"]
+        if proactive:
+            argv += ["--proactive", "--jira-dir", str(self.SAMPLE / "jira-cache"), "--meetings", f"{tmp}/none.json",
+                     "--state", f"{tmp}/s.json"]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            mp.main(argv)
+        return buf.getvalue()
+
+    def test_fold_shrinks_lines_but_keeps_conclusion_and_every_id(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            out = self._run(True, a)
+            base = self._run(False, b)
+        lines = out.splitlines()
+        self.assertEqual(lines[2], base.splitlines()[2])  # 結論行は変わらない
+        section = out[out.index("## 先回り"):out.index("## 詳細")]
+        self.assertNotIn("`due:t-0004`", section)
+        self.assertNotIn("`due:t-0001`", section)
+        self.assertNotIn("`waiting:t-0002`", section)
+        self.assertIn("既出のため畳んだ件: t-0004・t-0001・t-0002", section)
+        self.assertIn("`blocker:EX-103`", section)  # 新しい情報は畳まない
+        for tid in ("t-0004", "t-0001", "t-0002"):  # 見落としなし: 畳んだ件は上の節に必ず残る
+            self.assertIn(tid, out[:out.index("## 先回り")])
+        self.assertIn("催促 0 回済み", out)
+
+    def test_split_keeps_multi_rule_decision_and_not_listed_findings(self):
+        plan = {"top": [{"id": "t-1"}], "nudges": [{"id": "t-2"}]}
+        due = {"key": "due:t-1", "ref": "t-1", "rules": ["due"]}
+        both = {"key": "due:t-1", "ref": "t-1", "rules": ["due", "blocker"]}
+        not_top = {"key": "due:t-9", "ref": "t-9", "rules": ["due"]}
+        waiting = {"key": "waiting:t-2", "ref": "t-2", "rules": ["waiting"]}
+        asked = {"key": "waiting:t-2", "ref": "t-2", "rules": ["waiting"]}
+        self.assertEqual(mp.split_already_shown([due, waiting], set(), plan), ([], [due, waiting]))
+        self.assertEqual(mp.split_already_shown([both], set(), plan), ([both], []))
+        self.assertEqual(mp.split_already_shown([not_top], set(), plan), ([not_top], []))
+        self.assertEqual(mp.split_already_shown([asked], {"waiting:t-2"}, plan), ([asked], []))
+
+    def test_all_folded_does_not_say_nothing_to_do(self):
+        import proactive_scan as ps
+        f = {"key": "due:t-1", "ref": "t-1", "rules": ["due"], "level": "高", "fact": "x"}
+        text = "\n".join(ps.render_section([], 0, set(), date(2026, 10, 8), [f]))
+        self.assertNotIn("先回り対応不要", text)
+        self.assertIn("t-1", text)
+
+
 if __name__ == "__main__":
     unittest.main()

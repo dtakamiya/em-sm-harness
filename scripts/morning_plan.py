@@ -76,6 +76,27 @@ def build_plan(tasks, candidates, today):
     }
 
 
+def split_already_shown(shown, decisions, plan):
+    """先回りの所見のうち、同じ計画の「今日やる順」「催促候補」に同じ情報が出ているものを分ける（18 §2 まとめ）。
+
+    畳むのは、所見のルールが期限接近だけで対象が今日やる順にある件と、返信待ちだけで対象が催促候補にある件。
+    ブロッカー等ほかのルールを含む件・判断依頼は、新しい情報なので畳まない。
+    """
+    top_ids = {t["id"] for t in plan["top"]}
+    nudge_ids = {t["id"] for t in plan["nudges"]}
+
+    def already(f):
+        if f["key"] in decisions:
+            return False
+        return (f["rules"] == ["due"] and f["ref"] in top_ids) or (f["rules"] == ["waiting"] and f["ref"] in nudge_ids)
+
+    return [f for f in shown if not already(f)], [f for f in shown if already(f)]
+
+
+def _nudge_count(task):
+    return sum(h["op"] == "nudge" for h in task.get("history", []))
+
+
 def _md(d):
     return f"{d.month}/{d.day}"
 
@@ -111,7 +132,8 @@ def render(plan, proactive_lines=(), detail_extra=(), proactive=False):
         out.append(f"- ほか {plan['overflow']} 件は一覧に回しました")
     if plan["nudges"]:
         out += ["", "## 返信待ちの催促候補（下書き対象）"]
-        out += [f"- {t['id']} {t['waiting_on']} 待ち（確認予定 {_md(_day(t['next_check']))}）" for t in plan["nudges"]]
+        out += [f"- {t['id']} {t['waiting_on']} 待ち（確認予定 {_md(_day(t['next_check']))}・催促 {_nudge_count(t)} 回済み）"
+                for t in plan["nudges"]]
     if plan["defer_asks"]:
         out += ["", "## 判断依頼"]
         for t in plan["defer_asks"]:
@@ -152,7 +174,7 @@ def main(argv=None):
             shown, overflow, decisions, notes, new_state = ps.collect_with_state((args.tasks, args.jira_dir, args.meetings, args.state), today)
         except ps.BrokenInput as exc:
             raise SystemExit(f"先回り入力エラー: {exc}。状態は変更していません")
-        lines, detail = ps.render_section(shown, overflow, decisions, today), ps.detail_lines(notes)
+        detail = ps.detail_lines(notes)
     try:
         plan = build_plan(_load(args.tasks, "tasks"), _load(args.candidates, "candidates"), today)
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
@@ -161,6 +183,8 @@ def main(argv=None):
         # 判断依頼に回った返信待ちは、催促の下書き対象から外す（17 §2: 3 回目は下書きを出さない）
         asked = {f["ref"] for f in shown if f["key"] in decisions and f["rule"] == "waiting"}
         plan = {**plan, "nudges": [t for t in plan["nudges"] if t["id"] not in asked]}
+        kept, folded = split_already_shown(shown, decisions, plan)
+        lines = ps.render_section(kept, overflow, decisions, today, folded)
     output = render(plan, lines, detail, proactive=args.proactive)
     if args.proactive:
         ps.save_state(args.state, new_state)  # 出力が組み立てられた後にだけ保存する
