@@ -127,7 +127,7 @@ def ingest(structured_path, tasks_dir, out_dir, dry_run, audit_dir=None, now=Non
     tasks = sc._read_list(tasks_dir / "tasks.json", "tasks")
     rejected = sc._read_list(tasks_dir / "rejected.json", "rejected")
     known = {x.get("source_ref") for x in (*candidates, *tasks, *rejected) if x.get("source_ref")}
-    fresh, counts = build_candidates(source["file"], items, known, sc._next_number(candidates))
+    fresh, counts = build_candidates(source["file"], items, known, sc._next_number(candidates, tasks_dir))
     minutes = render_minutes(source, items, excluded)
     minutes_path = out_dir / f"{Path(source['file']).stem}-minutes.md"
     if not dry_run:
@@ -141,6 +141,7 @@ def ingest(structured_path, tasks_dir, out_dir, dry_run, audit_dir=None, now=Non
                 sc._atomic_write_bytes(tasks_dir / BACKUP_NAME, cand_path.read_bytes())
             body = json.dumps({"version": 1, "candidates": [*candidates, *fresh]}, ensure_ascii=False, indent=1) + "\n"
             sc._atomic_write_bytes(cand_path, body.encode("utf-8"))
+            sc.write_sequence(tasks_dir, max(int(c["id"][2:]) for c in fresh))
         if audit_dir is not None:  # 書込がすべて成功した後に記録する（失敗した取り込みは記録しない）
             now = now or datetime.now().astimezone()
             append_audit(audit_dir, now, audit_row(source, items, excluded, now))

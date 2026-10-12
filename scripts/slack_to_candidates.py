@@ -17,6 +17,7 @@ ACCEPTED_CONFIDENCE = ("high", "medium")
 TITLE_MAX = 80
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ID_NUMBER = re.compile(r"^c-(\d+)$")
+SEQUENCE_NAME = "candidate-seq.json"  # 採番済みの最大番号。採用・却下で candidates.json が空でも id を再利用しない
 BACKUP_NAME = "candidates.json.pre-slack.bak"  # apply_reply.py の .bak とは別名
 REQUIRED_ITEM_KEYS = ("id", "kind", "observation", "confidence")
 
@@ -84,9 +85,23 @@ def _due(due_raw):
     return due_raw if isinstance(due_raw, str) and ISO_DATE.match(due_raw) else None
 
 
-def _next_number(candidates):
+def _last_issued(tasks_dir):
+    """採番済みの最大番号。ファイルが無い・壊れているときは 0（現存候補の最大番号との大きい方を呼び出し側で取る）。"""
+    try:
+        value = json.loads((tasks_dir / SEQUENCE_NAME).read_text(encoding="utf-8")).get("last")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return value if isinstance(value, int) and value >= 0 else 0
+
+
+def _next_number(candidates, tasks_dir):
     numbers = [int(m.group(1)) for c in candidates if (m := ID_NUMBER.match(str(c.get("id", ""))))]
-    return max(numbers, default=0) + 1
+    return max([*numbers, _last_issued(tasks_dir)], default=0) + 1
+
+
+def write_sequence(tasks_dir, last):
+    body = json.dumps({"last": last}, indent=1) + "\n"
+    _atomic_write_bytes(tasks_dir / SEQUENCE_NAME, body.encode("utf-8"))
 
 
 def build_candidates(source_file, items, known_refs, start_number):
@@ -122,13 +137,14 @@ def ingest(structured_path, tasks_dir, dry_run):
     rejected = _read_list(tasks_dir / "rejected.json", "rejected")
     # 採用済み・却下済みの出典は再提案しない（04: source + source_ref が同一なら同一候補）
     known = {x.get("source_ref") for x in (*candidates, *tasks, *rejected) if x.get("source_ref")}
-    fresh, counts = build_candidates(source_file, items, known, _next_number(candidates))
+    fresh, counts = build_candidates(source_file, items, known, _next_number(candidates, tasks_dir))
     if fresh and not dry_run:
         tasks_dir.mkdir(parents=True, exist_ok=True)
         if cand_path.exists():
             _atomic_write_bytes(tasks_dir / BACKUP_NAME, cand_path.read_bytes())
         body = json.dumps({"version": 1, "candidates": [*candidates, *fresh]}, ensure_ascii=False, indent=1) + "\n"
         _atomic_write_bytes(cand_path, body.encode("utf-8"))
+        write_sequence(tasks_dir, max(int(c["id"][2:]) for c in fresh))
     return fresh, counts
 
 
