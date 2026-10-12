@@ -63,8 +63,8 @@ def candidates(issues):
     return sorted(pool, key=lambda i: (_priority_rank(i), not is_carried(i), _natural_key(i["key"])))
 
 
-def validate_history(history, alias):
-    """集計値の形式を検査して、終了日の新しい順に並べた sprints を返す。不正なら何も出さず終了する。"""
+def validate_history(history, alias, as_of):
+    """集計値の形式を検査して、終了日の新しい順に並べた sprints を返す。不正なら何も出さず終了する。as_of（キャッシュ取得日）より後に終わるスプリントは終了済みでないので弾く（06 §4）。"""
     if not isinstance(history, dict) or set(history) != HISTORY_KEYS:
         raise SystemExit(f"完了 SP の集計値の形式が不正です（キーは {sorted(HISTORY_KEYS)} のみ）。何も出力しません")
     if history["project_alias"] != alias:
@@ -80,6 +80,8 @@ def validate_history(history, alias):
             raise SystemExit(f"sprints[{i}].done_sp は 0 以上の整数にしてください（0 は有効）。何も出力しません")
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(s["end"])):
             raise SystemExit(f"sprints[{i}].end は YYYY-MM-DD で指定してください。何も出力しません")
+        if s["end"] > as_of:
+            raise SystemExit(f"sprints[{i}].end（{s['end']}）が取得日 {as_of} より後です（終了済みスプリントのみ）。何も出力しません")
     if len({s["id"] for s in sprints}) != len(sprints):
         raise SystemExit("完了 SP の集計値に重複したスプリント id があります。何も出力しません")
     return sorted(sprints, key=lambda s: s["end"], reverse=True)
@@ -111,7 +113,7 @@ def build_material(cache, history=None, workdays=None):
     pool = candidates(issues)
     unestimated = sum(1 for i in pool if i.get("story_points") is None)
     carried = sum(1 for i in pool if is_carried(i))
-    past = validate_history(history, cache["project_alias"]) if history is not None else []
+    past = validate_history(history, cache["project_alias"], cache["fetched_at"][:10]) if history is not None else []
     done_line, days_line = _capacity_line(past, workdays)
 
     shown = [_issue_label(i, status_by_key) for i in pool[:MAX_BODY_CANDIDATES]]
@@ -132,7 +134,9 @@ def build_material(cache, history=None, workdays=None):
     detail += [f"  - {_issue_label(i, status_by_key)}" for i in pool]
     detail += [f"- 見積もり状況: 候補 {len(pool)} 件のうち SP 未見積もり {unestimated} 件（合計 SP は出しません。未見積もりは幅に含まれません）",
                f"- 固定文言: {NOTICE}",
-               "- " + RANGE_NOTE.format(k=HISTORY_WINDOW)]
+               ]
+    if window == HISTORY_WINDOW:
+        detail.append("- " + RANGE_NOTE.format(k=HISTORY_WINDOW))
     return "\n".join(["【試作・架空サンプル専用】"] + body + ["", "詳細"] + detail)
 
 

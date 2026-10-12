@@ -162,7 +162,7 @@ class MaterialTest(unittest.TestCase):
 class HistoryValidationTest(unittest.TestCase):
     def _assert_rejected(self, history):
         with self.assertRaises(SystemExit):
-            sp.validate_history(history, "ex-proj")
+            sp.validate_history(history, "ex-proj", "2026-10-09")
 
     def test_rejects_unknown_keys_that_could_carry_personal_data(self):
         history = copy.deepcopy(_load("done-sp.three.json"))
@@ -181,6 +181,32 @@ class HistoryValidationTest(unittest.TestCase):
         history = copy.deepcopy(_load("done-sp.three.json"))
         history["sprints"][1]["id"] = history["sprints"][0]["id"]
         self._assert_rejected(history)
+
+
+class FutureAndEdgeTest(unittest.TestCase):
+    def test_rejects_sprint_ending_after_fetch_date_but_accepts_same_day(self):
+        history = copy.deepcopy(_load("done-sp.three.json"))
+        history["sprints"][0]["end"] = "2026-10-10"
+        with self.assertRaises(SystemExit):
+            sp.build_material(_load("jira-cache.planning.json"), history, 9)
+        history["sprints"][0]["end"] = "2026-10-09"
+        self.assertIn("過去 3 件", sp.build_material(_load("jira-cache.planning.json"), history, 9))
+
+    def test_range_note_only_when_range_is_shown(self):
+        short = _material(history="done-sp.two.json")
+        self.assertNotIn("の最小〜最大です", short)
+        self.assertIn("の最小〜最大です", _material())
+
+    def test_empty_issues_gives_zero_candidates_without_error(self):
+        cache = dict(_load("jira-cache.planning.json"), issues=[], issue_count=0)
+        self.assertIn("候補 0 件（未見積もり 0 件）", sp.build_material(cache, _load("done-sp.three.json"), 9))
+
+    def test_done_and_out_of_range_blockers_mixed_on_one_issue(self):
+        cache = _load("jira-cache.planning.json")
+        issue = next(i for i in cache["issues"] if i["key"] == "EX-202")
+        issue["links"] = [{"link_type": "Blocks", "direction": "inward", "issue_key": "EX-212"},
+                          {"link_type": "Blocks", "direction": "inward", "issue_key": "ZZ-1"}]
+        self.assertIn("EX-202 high 3SP（ブロッカー状態不明）", sp.build_material(cache, _load("done-sp.three.json"), 9))
 
 
 class CliTest(unittest.TestCase):
