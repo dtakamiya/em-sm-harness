@@ -41,9 +41,21 @@ class OneOnOneFollowupSkillTest(unittest.TestCase):
 
     def test_readme_lists_skill_but_not_in_daily_table(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        daily = readme.split("## 毎日の使い方", 1)[1].split("\n\n", 2)[1]
+        section = readme.split("## 毎日の使い方", 1)[1].split("\n## ", 1)[0]
+        table = "\n".join(l for l in section.splitlines() if l.startswith("|"))
         self.assertIn("`one-on-one-followup`", readme)
-        self.assertNotIn("one_on_one_followup", daily)
+        self.assertIn("morning_plan.py", table)  # 表を正しく切れている確認
+        self.assertNotIn("one_on_one_followup", table)
+
+    def test_daily_table_check_fails_when_row_is_added(self):
+        section = "| 朝 | x | `python3 scripts/morning_plan.py` |\n| 1on1 | y | `python3 scripts/one_on_one_followup.py` |\n- 箇条書き"
+        table = "\n".join(l for l in section.splitlines() if l.startswith("|"))
+        self.assertIn("one_on_one_followup", table)
+
+    def test_skill_states_apply_reply_limit_and_acceptance(self):
+        text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        for phrase in ("中止（drop）は未対応", "## 受け入れ基準", "用語:", "source_ref"):
+            self.assertIn(phrase, text)
 
     def test_sample_is_synthetic(self):
         sample = (SKILL / "examples" / "tasks.sample.json").read_text(encoding="utf-8")
