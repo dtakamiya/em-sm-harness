@@ -95,7 +95,7 @@ def render(w):
                     lambda t: f"{t['id']} {t['title']}（" + ("期限" if t in w["seeds_due"] else "返信確認") + "が明日）")
     if w["defer_asks"]:
         out += ["", "## 判断依頼"]
-        out += [f"- {t['id']} は先送りが続いています。A) drop B) 分割。おすすめ: B。期限: 今週中"
+        out += [f"- {t['id']} は先送りが続いています。A) 中止 B) 分割。おすすめ: B。期限: 今週中（返答: 中止 {t['id']} / 分割 {t['id']} 案1 案2）"
                 for t in w["defer_asks"]]
     out += ["", "## 詳細",
             "- 読み取り専用。tasks.json は変更しません（反映は返答→定型語→apply_reply。docs/design/24）",

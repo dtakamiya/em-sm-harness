@@ -83,12 +83,61 @@ class ApplyReplyTest(unittest.TestCase):
         self.assertEqual((t["status"], t["next_check"]), ("done", None))
         self.assertEqual(t["history"][-1], {"at": "2026-10-05", "op": "done", "from": "waiting"})
 
+    def test_drop_marks_dropped_with_reason_and_clears_next_check(self):
+        out = self.run_replies("中止 t-0002 不要になった")
+        t = [x for x in self.read("tasks.json", "tasks") if x["id"] == "t-0002"][0]
+        self.assertEqual((t["status"], t["next_check"]), ("dropped", None))
+        self.assertEqual(t["history"][-1], {"at": "2026-10-05", "op": "drop", "from": "waiting", "reason": "不要になった"})
+        self.assertEqual(out[0], "✗ t-0002 中止")
+
+    def test_drop_without_reason_is_allowed(self):
+        self.run_replies("中止 t-0001")
+        t = self.read("tasks.json", "tasks")[0]
+        self.assertEqual((t["status"], t["history"][-1]["op"]), ("dropped", "drop"))
+        self.assertNotIn("reason", t["history"][-1])
+
+    def test_split_drops_parent_and_creates_open_children_inheriting_due(self):
+        out = self.run_replies("分割 t-0001 調査 実装")
+        tasks = self.read("tasks.json", "tasks")
+        parent, kids = tasks[0], tasks[-2:]
+        self.assertEqual((parent["status"], parent["history"][-1]["op"]), ("dropped", "split"))
+        self.assertEqual([(k["id"], k["title"], k["status"], k["due"]) for k in kids],
+                         [("t-0004", "調査", "open", "2026-10-09"), ("t-0005", "実装", "open", "2026-10-09")])
+        self.assertIn("分割元 t-0001", kids[0]["notes"])
+        self.assertEqual(out[0], "✂ t-0001 を分割 → t-0004 調査 / t-0005 実装")
+
+    def test_split_needs_at_least_two_titles(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        with self.assertRaises(ar.ReplyError):
+            self.run_replies("分割 t-0001 調査")
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+
+    def test_drop_and_split_reject_closed_tasks(self):
+        for line in ("中止 t-0003", "分割 t-0003 甲 乙"):
+            with self.assertRaises(ar.ReplyError, msg=line):
+                self.run_replies(line)
+
+    def test_split_audit_lists_all_new_ids_and_undo_restores(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        self.run_replies("分割 t-0001 調査 実装")
+        row = self.audit_rows()[-1]
+        self.assertEqual((row["op"], row["new_task_ids"]), ("split", ["t-0004", "t-0005"]))
+        ar.undo(self.data, now=NOW)
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+
+    def test_decision_request_is_cleared_after_drop(self):
+        hist = [{"at": "2026-10-01", "op": "defer"}] * 3
+        self.write("tasks.json", "tasks", [task("t-0001", history=hist)])
+        self.run_replies("中止 t-0001")
+        self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "dropped")
+
     def test_defer_changes_due_and_warns_on_third(self):
         hist = [{"at": "2026-10-01", "op": "defer"}, {"at": "2026-10-02", "op": "defer"}]
         self.write("tasks.json", "tasks", [task("t-0001", history=hist)])
         out = self.run_replies("先送り t-0001 2026-10-16")
         self.assertIn("3回目", out[0])
-        self.assertIn("drop か分割", out[0])
+        self.assertIn("中止 t-0001", out[0])
+        self.assertIn("分割 t-0001", out[0])
         self.assertEqual(self.read("tasks.json", "tasks")[0]["due"], "2026-10-16")
 
     def test_unknown_id_rejects_whole_batch_without_writing(self):
