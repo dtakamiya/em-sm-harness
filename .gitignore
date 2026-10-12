@@ -8,3 +8,6 @@ config/local.*
 .claude/settings.local.json
 __pycache__/
 *.pyc
+
+# シミュレーション実行結果（out/ にログ・ワークスペースが出る。実行ごとに作り直す）
+simulation/out/
