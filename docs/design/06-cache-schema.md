@@ -53,6 +53,7 @@
 - 部分取得（`complete: false`）も TTL で消える。消えた分は「再取得が必要」と表示
 - 削除は監査ログに件数と alias のみ記録（本文・タイトルは書かない）
 - 履歴の持ち越し（EM 回答済み: Q-007=a、90 日）: キャッシュは 14 日で消えるので、指標の入力は本文なし・`summary` なしの集計値として `data/structured/` に確定させる。保持は 90 日。**`assignee_ref` と遷移の個別履歴は持ち込まない**（担当者別の件数・SP の分布など集計値のみ。少人数だと鍵があれば逆引きでき、個人別データが長く残ると評価転用のリスクがあるため）。保持期間は `structured_ttl_days`（キャッシュの `ttl_days` とは別設定。コード側上限 90 日）。`summary` や本文を含む派生物（`structured/`・`outputs/`）はキャッシュと同じ 14 日を継承する
+- 終了済みスプリントごとの完了 SP 合計（S2 用・[33](33-sprint-planning-material.md)）: `data/structured/sprint-done-sp/<project_alias>.json` = `{schema_version, fetched_at, project_alias, sprints: [{id, name, end, done_sp}]}`。`done_sp` = そのスプリントで `status_category = done` の課題の SP 合計（`null` は除外・`0` は含む。0 以上の整数）。キーはこの 4 つだけ（`assignee_ref`・課題キー・個人別の値は持たない）。読む側は `end` が新しい順に直近 3 件だけ使う。保持は上記の `structured_ttl_days`（90 日。起点はファイルの `fetched_at`）
 
 ## 5. 会社データが会社 PC に残るリスクへの対策
 1. 最小保存（上記）。表示名・メール・コメント・description は元から持たない

@@ -1,0 +1,80 @@
+{
+ "schema_version": 1,
+ "fetched_at": "2026-10-09T08:30:00+09:00",
+ "project_alias": "ex-proj",
+ "jql_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+ "complete": false,
+ "partial_reason": "timeout",
+ "issue_count": 3,
+ "issues": [
+  {
+   "key": "EX-201",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "High",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 5,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 10,
+     "name": "Sprint 10",
+     "state": "closed",
+     "start": "2026-09-14",
+     "end": "2026-09-25"
+    },
+    {
+     "id": 9,
+     "name": "Sprint 9",
+     "state": "closed",
+     "start": "2026-08-31",
+     "end": "2026-09-11"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-202",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "High",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 3,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-203",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": null,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  }
+ ]
+}
