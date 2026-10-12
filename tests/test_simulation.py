@@ -37,6 +37,11 @@ class SimulationTest(unittest.TestCase):
         self.assertEqual(names[0], "morning_plan")
         self.assertEqual(names[-2:], ["weekly_review", "proactive_scan --digest"])
 
+    def test_monday_fixture_does_not_show_future_events_on_monday(self):
+        monday_morning = self.steps[0]
+        self.assertEqual(monday_morning["name"], "morning_plan")
+        self.assertNotIn("先送りが続いています", monday_morning["stdout"])
+
     def test_source_fixture_is_not_modified(self):
         self.assertEqual(tree_hash(FIXTURE), self.before)
 
