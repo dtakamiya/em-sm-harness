@@ -51,7 +51,7 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 - ステークホルダー報告（`skills/stakeholder-report`、[12](docs/design/12-secretary-job-list.md) R1/R2）は**試作・架空サンプルのみ**: 結論→リスク→要判断の下書きと、数字・日付の出典チェックリストを出す。上の毎日の手順にはまだ含めない（EM が実案件で試して手間が減るか判定する）
 - 1on1 前回アクション追跡（`skills/one-on-one-followup`、[32](docs/design/32-one-on-one-followup.md)、O2）は**試作・架空サンプルのみ**: 前回の約束の未完了・返信待ち・完了・中止を tasks から1枚で出す（O2＝1on1 の前回アクション追跡）。前回の 1on1 日と対象は毎回 EM が渡す（保存しない）。上の毎日の手順にはまだ含めない（EM が次の 1on1 前に使って、前回の約束が漏れなく出たか判定する）
 - 計画・締め・棚卸しは、返答を定型語にして `apply_reply.py` で反映する（書式は [24-reply-apply.md](docs/design/24-reply-apply.md)）
-- 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `meeting-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan` / `sprint-health` / `stakeholder-report` / `one-on-one-followup`）
+- 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `meeting-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan` / `sprint-health` / `sprint-planning` / `stakeholder-report` / `one-on-one-followup`）
 - 実データは `data/`（gitignore）に置く。サンプルで試すだけなら各 SKILL.md の「試す」を実行
 
 ## ディレクトリ

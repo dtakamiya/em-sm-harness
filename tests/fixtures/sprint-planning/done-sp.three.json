@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "project_alias": "ex-proj",
+ "sprints": [
+  {
+   "id": 8,
+   "name": "Sprint 8",
+   "end": "2026-08-28",
+   "done_sp": 19
+  },
+  {
+   "id": 9,
+   "name": "Sprint 9",
+   "end": "2026-09-11",
+   "done_sp": 26
+  },
+  {
+   "id": 10,
+   "name": "Sprint 10",
+   "end": "2026-09-25",
+   "done_sp": 18
+  },
+  {
+   "id": 7,
+   "name": "Sprint 7",
+   "end": "2026-08-14",
+   "done_sp": 40
+  }
+ ]
+}

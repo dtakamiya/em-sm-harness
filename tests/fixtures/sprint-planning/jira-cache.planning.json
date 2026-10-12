@@ -1,0 +1,295 @@
+{
+ "schema_version": 1,
+ "fetched_at": "2026-10-09T08:30:00+09:00",
+ "project_alias": "ex-proj",
+ "jql_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+ "complete": true,
+ "partial_reason": null,
+ "issue_count": 12,
+ "issues": [
+  {
+   "key": "EX-201",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "High",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 5,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 10,
+     "name": "Sprint 10",
+     "state": "closed",
+     "start": "2026-09-14",
+     "end": "2026-09-25"
+    },
+    {
+     "id": 9,
+     "name": "Sprint 9",
+     "state": "closed",
+     "start": "2026-08-31",
+     "end": "2026-09-11"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-202",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "High",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 3,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-203",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": null,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-204",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 0,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-205",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Low",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 2,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [
+    {
+     "link_type": "Blocks",
+     "direction": "inward",
+     "issue_key": "EX-299"
+    }
+   ],
+   "transitions": []
+  },
+  {
+   "key": "EX-206",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Highest",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 8,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 10,
+     "name": "Sprint 10",
+     "state": "closed",
+     "start": "2026-09-14",
+     "end": "2026-09-25"
+    },
+    {
+     "id": 9,
+     "name": "Sprint 9",
+     "state": "closed",
+     "start": "2026-08-31",
+     "end": "2026-09-11"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-207",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Low",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": null,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-208",
+   "summary": null,
+   "status": "To Do",
+   "status_category": "new",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 1,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-210",
+   "summary": null,
+   "status": "In Progress",
+   "status_category": "indeterminate",
+   "issuetype": "Task",
+   "priority": "High",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 3,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 11,
+     "name": "Sprint 11",
+     "state": "active",
+     "start": "2026-09-28",
+     "end": "2026-10-09"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-211",
+   "summary": null,
+   "status": "Done",
+   "status_category": "done",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": "2026-10-07",
+   "story_points": 2,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 11,
+     "name": "Sprint 11",
+     "state": "active",
+     "start": "2026-09-28",
+     "end": "2026-10-09"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-212",
+   "summary": null,
+   "status": "Done",
+   "status_category": "done",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": "2026-10-07",
+   "story_points": 2,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 10,
+     "name": "Sprint 10",
+     "state": "closed",
+     "start": "2026-09-14",
+     "end": "2026-09-25"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  },
+  {
+   "key": "EX-299",
+   "summary": null,
+   "status": "In Progress",
+   "status_category": "indeterminate",
+   "issuetype": "Task",
+   "priority": "Medium",
+   "assignee_ref": null,
+   "created": "2026-09-01",
+   "updated": "2026-10-08",
+   "resolved": null,
+   "story_points": 2,
+   "flagged": false,
+   "parent_key": null,
+   "sprints": [
+    {
+     "id": 11,
+     "name": "Sprint 11",
+     "state": "active",
+     "start": "2026-09-28",
+     "end": "2026-10-09"
+    }
+   ],
+   "links": [],
+   "transitions": []
+  }
+ ]
+}
