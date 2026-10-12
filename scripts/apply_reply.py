@@ -14,6 +14,8 @@ from pathlib import Path
 
 LATER_DAYS = 1
 DEFER_ASK_COUNT = 3
+MIN_SPLIT_TITLES = 2
+MAX_SPLIT_TITLES = 5
 UNDO_MANIFEST = ".last-reply.json"
 TRACKED = ("tasks.json", "candidates.json", "rejected.json")
 OPEN_STATES = ("open", "doing", "waiting")
@@ -67,9 +69,10 @@ def parse(line):
     """定型語 1 行 → (op, id, 追加引数)。曖昧なものは拒否する（推測しない）。"""
     parts = line.split()
     ops = {"採用": ("adopt", 0, 0), "却下": ("reject", 0, 0), "後で": ("later", 0, 1),
-           "完了": ("done", 0, 0), "先送り": ("defer", 1, 1)}
+           "完了": ("done", 0, 0), "先送り": ("defer", 1, 1),
+           "中止": ("drop", 0, 1), "分割": ("split", MIN_SPLIT_TITLES, MAX_SPLIT_TITLES - MIN_SPLIT_TITLES)}
     if not parts or parts[0] not in ops:
-        raise ReplyError(f"解釈できません: 「{line}」。書式は 採用/却下/後で/完了/先送り + id（先送りは日付も）")
+        raise ReplyError(f"解釈できません: 「{line}」。書式は 採用/却下/後で/完了/先送り/中止/分割 + id（先送りは日付、分割は 2〜5 件のタイトルも）")
     op, need, optional = ops[parts[0]]
     args = parts[1:]
     if not args:
@@ -123,6 +126,12 @@ def apply_one(state, op, target, extra, today, archive_dir):
     task = _find(tasks, target, "タスク")
     if task["status"] not in OPEN_STATES:
         raise ReplyError(f"{target} は {task['status']} のため操作できません（戻すなら reopen を EM が指示）")
+    if op == "drop":
+        reason = {"reason": extra[0]} if extra else {}
+        new = _with_history(task, today, {"op": "drop", "from": task["status"], **reason}, status="dropped", next_check=None)
+        return {**state, "tasks": [new if t["id"] == target else t for t in tasks]}, f"✗ {target} 中止"
+    if op == "split":
+        return _split(state, task, extra, today, archive_dir)
     if op == "done":
         new = _with_history(task, today, {"op": "done", "from": task["status"]}, status="done", next_check=None)
         line = f"✓ {target} 完了"
@@ -134,15 +143,33 @@ def apply_one(state, op, target, extra, today, archive_dir):
                             due=new_due.isoformat())
         line = f"→ {target} 期限 {old}→{_md(new_due)}（{count}回目）"
         if count >= DEFER_ASK_COUNT:
-            line += " ※先送りが続いています。drop か分割かを決めてください"
+            line += f" ※先送りが続いています。中止 {target} か 分割 {target} 案1 案2 かを決めてください"
     return {**state, "tasks": [new if t["id"] == target else t for t in tasks]}, line
+
+
+def _split(state, parent, titles, today, archive_dir):
+    """親を dropped（理由=分割）にし、タイトルごとに open の子を作る。期限・優先度は親を引き継ぐ。"""
+    tasks = state["tasks"]
+    closed = _with_history(parent, today, {"op": "split", "from": parent["status"]}, status="dropped", next_check=None)
+    kids, known = [], list(tasks)
+    for title in titles:
+        kid = {"id": _next_task_id(known, archive_dir), "title": title, "status": "open", "priority": parent["priority"],
+               "due": parent.get("due"), "source": "manual", "source_ref": None, "waiting_on": None, "next_check": None,
+               "blocks": [], "tags": [], "notes": f"分割元 {parent['id']}", "created": today.isoformat(),
+               "updated": today.isoformat(), "history": [{"at": today.isoformat(), "op": "add"}]}
+        kids.append(kid)
+        known.append(kid)
+    done = [closed if t["id"] == parent["id"] else t for t in tasks]
+    line = f"✂ {parent['id']} を分割 → " + " / ".join(f"{k['id']} {k['title']}" for k in kids)
+    return {**state, "tasks": [*done, *kids]}, line
 
 
 ACTOR = "secretary"
 
 
 OP_FILES = {"adopt": ("tasks.json", "candidates.json"), "reject": ("candidates.json", "rejected.json"),
-            "later": ("candidates.json",), "done": ("tasks.json",), "defer": ("tasks.json",)}
+            "later": ("candidates.json",), "done": ("tasks.json",), "defer": ("tasks.json",),
+            "drop": ("tasks.json",), "split": ("tasks.json",)}
 
 
 def _audit_rows(now, batch_id, parsed, before, after, new_ids):
@@ -153,7 +180,8 @@ def _audit_rows(now, batch_id, parsed, before, after, new_ids):
     for i, (op, target, _) in enumerate(parsed):
         changes = [{"file": f, "before_sha256": before[f], "after_sha256": after[f]}
                    for f in OP_FILES[op] if before[f] != after[f]]
-        extra = {"new_task_id": new_ids[i]} if i in new_ids else {}
+        made = new_ids.get(i, [])
+        extra = {"new_task_ids": made} if op == "split" else {"new_task_id": made[0]} if made else {}
         rows.append({**base, "op": op, "target_id": target, **extra, "changes": changes})
     return rows
 
@@ -189,7 +217,7 @@ def apply_replies(data_dir, lines, today, now=None, dry_run=False):
         state, line = apply_one(state, op, target, extra, today, tasks_dir / "archive")
         created = [t["id"] for t in state["tasks"] if t["id"] not in known]
         if created:
-            new_ids[i] = created[0]
+            new_ids[i] = created
         results.append(line)
     if dry_run:
         return results

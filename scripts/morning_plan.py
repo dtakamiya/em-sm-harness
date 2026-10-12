@@ -140,7 +140,7 @@ def render(plan, proactive_lines=(), detail_extra=(), proactive=False):
     if plan["defer_asks"]:
         out += ["", "## 判断依頼"]
         for t in plan["defer_asks"]:
-            out += [f"- {t['id']} は先送りが続いています。A) drop B) 分割。おすすめ: B。期限: 今週中"]
+            out += [f"- {t['id']} は先送りが続いています。A) 中止 B) 分割。おすすめ: B。期限: 今週中（返答: 中止 {t['id']} / 分割 {t['id']} 案1 案2）"]
     if plan["candidates"]:
         out += ["", "## 新規タスク候補（未確定）"]
         out += [f"- {c['id']} {c['title']}（出典 {c['source_ref']}）" for c in plan["candidates"]]
