@@ -1,0 +1,8 @@
+{"version": 1, "tasks": [
+ {"id": "t-0301", "title": "設計レビューの観点を共有する", "status": "done", "source": "meeting", "source_ref": "1on1-member-a-2026-09-26.md", "due": null, "blocks": [], "history": [{"at": "2026-09-26", "op": "add"}, {"at": "2026-10-02", "op": "done"}]},
+ {"id": "t-0302", "title": "キャリアの相談枠を調整する", "status": "open", "source": "meeting", "source_ref": "1on1-member-a-2026-09-26.md", "due": "2026-10-06", "blocks": [], "history": [{"at": "2026-09-26", "op": "add"}]},
+ {"id": "t-0303", "title": "仕様の確認結果を受け取る", "status": "waiting", "source": "meeting", "source_ref": "1on1-member-a-2026-09-26.md", "waiting_on": "member-a", "next_check": "2026-10-09", "due": null, "blocks": [], "history": [{"at": "2026-09-26", "op": "add"}, {"at": "2026-10-01", "op": "delegate"}]},
+ {"id": "t-0304", "title": "研修の候補を探す", "status": "dropped", "source": "meeting", "source_ref": "1on1-member-a-2026-09-26.md", "due": null, "blocks": [], "history": [{"at": "2026-09-26", "op": "add"}, {"at": "2026-10-03", "op": "drop"}]},
+ {"id": "t-0305", "title": "別の相手のタスク", "status": "open", "source": "meeting", "source_ref": "1on1-member-b-2026-09-30.md", "due": null, "blocks": [], "history": [{"at": "2026-09-30", "op": "add"}]},
+ {"id": "t-0306", "title": "前回より前に完了したタスク", "status": "done", "source": "meeting", "source_ref": "1on1-member-a-2026-09-26.md", "due": null, "blocks": [], "history": [{"at": "2026-09-20", "op": "add"}, {"at": "2026-09-24", "op": "done"}]}
+]}
