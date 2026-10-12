@@ -25,11 +25,23 @@ class MakeDraftTest(unittest.TestCase):
     def setUp(self):
         self.slack = _sample("slack-reply")
         self.jira = _sample("jira-comment")
+        self.nudge = _sample("nudge")
 
     def test_render_matches_expected_output_for_both_scenes(self):
         for scene, name in (("slack-reply", "slack-reply"), ("jira-comment", "jira-comment")):
             expected = (EXAMPLES / f"expected-{name}.md").read_text(encoding="utf-8")
             self.assertEqual(md.render(scene, _sample(name)), expected)
+
+    def test_nudge_matches_expected_output(self):
+        expected = (EXAMPLES / "expected-nudge.md").read_text(encoding="utf-8")
+        self.assertEqual(md.render("nudge", self.nudge), expected)
+
+    def test_nudge_is_gated_like_other_scenes(self):
+        for bad in (_with(self.nudge, type="督促"), _with(self.nudge, variants=["進んでいますか。いつ終わりますか。"]),
+                    _with(self.nudge, variants=["金曜までにお願いします。"]), _with(self.nudge, handle="Taro Yamada"),
+                    _with(self.nudge, task_id=""), _with(self.nudge, em_decides=[])):
+            with self.assertRaises(md.DraftError):
+                md.render("nudge", bad)
 
     def test_output_is_marked_unsent_and_has_em_decides_slot(self):
         for scene, data in (("slack-reply", self.slack), ("jira-comment", self.jira)):

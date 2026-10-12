@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 DIR = Path(__file__).resolve().parent.parent / "templates" / "drafts"
-TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "meeting-minutes", "retro-facilitation"]
+TEMPLATES = ["slack-reply", "one-on-one-agenda", "sprint-status-summary", "stakeholder-report", "jira-comment", "nudge", "meeting-minutes", "retro-facilitation"]
 SECTIONS = ["## 必須項目", "## テンプレ", "## EM が直す手間を減らす工夫", "## 匿名化サンプル"]
 BANNER = "【下書き・未送信】"
 COMMIT_SLOT = "⟦EM"
