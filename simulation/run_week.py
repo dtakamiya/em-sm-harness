@@ -4,7 +4,7 @@
 L1・ローカル完結: 外部接続・送信・書込なし。ワークスペース（simulation/out/workspace/）に架空 fixture をコピーして使い、
 元 fixture と data/ は触らない（実行後に fixture のハッシュと data/ の有無を検証する）。
 出力（out/）は gitignore。結果は out/run-log.json と out/run-log.md に残す。
-使い方: python3 simulation/run_week.py [--keep]   （終了コード 0=全ステップ成功 / 1=失敗ステップあり / 2=安全検査 NG）
+使い方: python3 simulation/run_week.py [--fixture monday|snapshot]   （終了コード 0=全ステップ成功 / 1=失敗ステップあり / 2=安全検査 NG）
 """
 import argparse
 import hashlib
@@ -20,7 +20,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SIM = Path(__file__).resolve().parent
 OUT = SIM / "out"
 WS = OUT / "workspace"
-FIXTURE = ROOT / "tests" / "fixtures" / "sample-week"
+FIXTURES = {"monday": ROOT / "tests" / "fixtures" / "sample-week-monday",
+            "snapshot": ROOT / "tests" / "fixtures" / "sample-week"}  # snapshot = 10/8（水）時点の断面（未来日付を読む）
+FIXTURE = FIXTURES["monday"]
 SKILLS = ROOT / "skills"
 SCRIPTS = ROOT / "scripts"
 
@@ -65,7 +67,6 @@ def prepare_workspace():
     for name in ("tasks.json", "candidates.json"):
         shutil.copy(FIXTURE / "tasks" / name, WS / "tasks" / name)
     shutil.copytree(FIXTURE / "jira-cache", WS / "jira-cache")
-    shutil.copytree(FIXTURE / "slack", WS / "slack-paste")
     (WS / "structured" / "slack").mkdir(parents=True)
     (WS / "structured" / "meeting").mkdir(parents=True)
     (WS / "drafts-in").mkdir()
@@ -76,7 +77,9 @@ def prepare_workspace():
         shutil.copy(f, WS / "structured" / "meeting" / f.name)
     for f in (SKILLS / "draft-reply" / "examples").glob("*.sample.json"):
         shutil.copy(f, WS / "drafts-in" / f.name)
-    shutil.copy(SKILLS / "proactive-scan" / "examples" / "meetings.sample.json", WS / "meetings" / "meetings.json")
+    meetings = FIXTURE / "meetings" / "meetings.json"
+    shutil.copy(meetings if meetings.exists() else SKILLS / "proactive-scan" / "examples" / "meetings.sample.json",
+                WS / "meetings" / "meetings.json")
 
 
 def py(script, *args):
@@ -94,6 +97,16 @@ def paths():
         "audit": WS / "audit",
         "drafts": WS / "outputs" / "drafts",
     }
+
+
+def task_id_by_title(fragments):
+    """タイトルの一部（文字列か、候補の組）から task id を引く（採用で振られる id は実行時に決まる）。無ければ空文字（返答が拒否され失敗として残る）。"""
+    try:
+        rows = json.loads(paths()["tasks"].read_text(encoding="utf-8"))["tasks"]
+    except (OSError, ValueError, KeyError):
+        return ""
+    wanted = (fragments,) if isinstance(fragments, str) else fragments
+    return next((r["id"] for r in rows if any(f in r["title"] for f in wanted)), "")
 
 
 def first_candidate_ids(limit):
@@ -160,18 +173,20 @@ def weekly(day, p):
 def week_plan(p):
     """(Step か、実行時に Step を作る関数) の列。返答は直前の取り込み結果を見て決める。"""
     adopt = lambda day, n: (lambda: reply(day, [f"採用 {i}" for i in first_candidate_ids(n)] or ["採用 c-0001"]))
-    done = lambda day, tid: (lambda: reply(day, [f"完了 {tid}"]))
+    done = lambda day, title: (lambda: reply(day, [f"完了 {task_id_by_title(title)}"]))
+    defer = lambda day, title, until: (lambda: reply(day, [f"先送り {task_id_by_title(title)} {until}"]))
     return [
         morning("mon", p), slack("mon", "2026-10-05-ex-team-01.json", p, True), slack("mon", "2026-10-05-ex-team-01.json", p, False),
         meeting("mon", "2026-10-05-ex-planning.json", p, True), meeting("mon", "2026-10-05-ex-planning.json", p, False),
         adopt("mon", 3), evening("mon", p),
-        morning("tue", p), done("tue", "t-0004"), evening("tue", p),
-        morning("wed", p), slack("wed", "2026-10-07-ex-team-02.json", p, False),
+        morning("tue", p), done("tue", "ステークホルダー週次報告"), defer("tue", "リリース判断の準備メモ", "2026-10-12"),
+        evening("tue", p),
+        morning("wed", p), defer("wed", "リリース判断の準備メモ", "2026-10-13"), slack("wed", "2026-10-07-ex-team-02.json", p, False),
         meeting("wed", "2026-10-07-ex-sync.json", p, False),
         draft("wed", "slack-reply", "slack-reply.sample.json", p), adopt("wed", 2), evening("wed", p),
         morning("thu", p), meeting("thu", "2026-10-08-ex-review.json", p, False),
-        draft("thu", "jira-comment", "jira-comment.sample.json", p), done("thu", "t-0001"), evening("thu", p),
-        morning("fri", p), done("fri", "t-0002"), evening("fri", p), *weekly("fri", p),
+        draft("thu", "jira-comment", "jira-comment.sample.json", p), done("thu", ("金曜までに決めたい", "デモ環境の担当")), evening("thu", p),
+        morning("fri", p), done("fri", "staging データ準備"), evening("fri", p), *weekly("fri", p),
     ]
 
 
@@ -193,7 +208,11 @@ def render_md(steps, safety):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="架空の 1 週間を通しで再現する（L1・ローカル完結）")
-    ap.parse_args(argv)
+    ap.add_argument("--fixture", choices=sorted(FIXTURES), default="monday",
+                    help="monday=月曜起点（既定） / snapshot=10/8（水）時点の断面（月曜から通すと未来日付を読む）")
+    args = ap.parse_args(argv)
+    global FIXTURE
+    FIXTURE = FIXTURES[args.fixture]
     fixture_before = sha_tree(FIXTURE)
     data_existed = (ROOT / "data").exists()
     data_before = sha_tree(ROOT / "data") if data_existed else None

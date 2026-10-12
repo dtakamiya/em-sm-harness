@@ -3,9 +3,10 @@
 README「毎日の使い方」の順（朝 → Slack/会議の取り込み → 返信案 → 返答の反映 → 夕方 → 金曜の棚卸し）を、実コマンドで月〜金（2026-10-05〜10-09、日付固定）通して再現する。
 
 ```
-python3 simulation/run_week.py    # 終了コード 0=全成功 / 1=失敗ステップあり / 2=安全検査 NG
+python3 simulation/run_week.py                      # 終了コード 0=全成功 / 1=失敗ステップあり / 2=安全検査 NG
 ```
 
+- 既定の入力は月曜起点の `tests/fixtures/sample-week-monday`（月曜朝の時点より後の履歴・Jira 更新を含まない）。`--fixture snapshot` で 10/8（水）時点の断面 `sample-week` も使える（月曜から通すと未来日付を読む）
 - **L1・ローカル完結**: 送信・書込・外部接続なし。実データは使わない（入力は `tests/fixtures/sample-week` と各 skill の `examples/` の架空データ）
 - 毎回 `simulation/out/workspace/` を作り直し、そこへ fixture をコピーして使う。各スクリプトの `--tasks` / `--tasks-dir` / `--data-dir` 等でワークスペースを向け、`data/` は触らない。実行後に元 fixture と `data/` のハッシュ不変を検証する
 - `simulation/out/`（ワークスペース・`run-log.md` / `run-log.json`）は gitignore。コミットしない

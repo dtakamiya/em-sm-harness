@@ -1,0 +1,73 @@
+{
+ "version": 1,
+ "tasks": [
+  {
+   "id": "t-0001",
+   "title": "ステークホルダー週次報告を確認する",
+   "status": "open",
+   "priority": "later",
+   "due": "2026-10-07",
+   "source": "manual",
+   "source_ref": null,
+   "waiting_on": null,
+   "next_check": null,
+   "blocks": [],
+   "tags": [],
+   "notes": "",
+   "created": "2026-10-02",
+   "updated": "2026-10-02",
+   "history": [
+    {
+     "at": "2026-10-02",
+     "op": "add"
+    }
+   ]
+  },
+  {
+   "id": "t-0002",
+   "title": "member-c の staging データ準備を待つ",
+   "status": "waiting",
+   "priority": "soon",
+   "due": null,
+   "source": "manual",
+   "source_ref": null,
+   "waiting_on": "member-c",
+   "next_check": "2026-10-08",
+   "blocks": [
+    "t-0003"
+   ],
+   "tags": [],
+   "notes": "",
+   "created": "2026-10-02",
+   "updated": "2026-10-02",
+   "history": [
+    {
+     "at": "2026-10-02",
+     "op": "add"
+    }
+   ]
+  },
+  {
+   "id": "t-0003",
+   "title": "リリース判断の準備メモを作る",
+   "status": "open",
+   "priority": "soon",
+   "due": "2026-10-13",
+   "source": "manual",
+   "source_ref": null,
+   "waiting_on": null,
+   "next_check": null,
+   "blocks": [],
+   "tags": [],
+   "notes": "",
+   "created": "2026-10-02",
+   "updated": "2026-10-02",
+   "history": [
+    {
+     "at": "2026-10-02",
+     "op": "add"
+    }
+   ]
+  }
+ ]
+}
