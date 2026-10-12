@@ -291,5 +291,61 @@ class FoldAlreadyShownTest(unittest.TestCase):
         self.assertIn("t-1", text)
 
 
+
+class DetailMatchesInputsTest(unittest.TestCase):
+    """--proactive の「## 詳細」が、渡した入力の有無と矛盾しない（emh-062）。全部あり・一部のみ・全部なしの3通り。"""
+    SAMPLE = ROOT / "tests" / "fixtures" / "sample-week"
+    NO_TASKS = "タスク一覧: 入力なし"
+    NO_JIRA = "Jira キャッシュ: 入力なし"
+    NO_MEETINGS = "会議一覧: 入力なし"
+
+    def _detail(self, tmp, tasks=True, jira=True, meetings=True):
+        import contextlib
+        import io
+        meetings_path = f"{tmp}/meetings.json"
+        if meetings:
+            Path(meetings_path).write_text(json.dumps({"meetings": [
+                {"id": "m-1", "title": "架空の定例", "start": "2026-10-09"}]}), encoding="utf-8")
+        argv = ["--tasks", str(self.SAMPLE / "tasks/tasks.json") if tasks else f"{tmp}/no-tasks.json",
+                "--candidates", str(self.SAMPLE / "tasks/candidates.json"), "--today", "2026-10-08", "--proactive",
+                "--jira-dir", str(self.SAMPLE / "jira-cache") if jira else f"{tmp}/no-jira",
+                "--meetings", meetings_path, "--state", f"{tmp}/s.json"]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            mp.main(argv)
+        return buf.getvalue().split("## 詳細", 1)[1]
+
+    def test_all_inputs_present_reports_no_missing_input(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            detail = self._detail(tmp)
+        for missing in (self.NO_TASKS, self.NO_JIRA, self.NO_MEETINGS):
+            self.assertNotIn(missing, detail)
+        self.assertIn("Confluence は入力未接続のため未反映", detail)
+
+    def test_partial_inputs_name_only_the_missing_one(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            detail = self._detail(tmp, meetings=False)
+        self.assertIn(self.NO_MEETINGS, detail)
+        self.assertNotIn(self.NO_TASKS, detail)
+        self.assertNotIn(self.NO_JIRA, detail)
+
+    def test_partial_inputs_with_only_jira_missing(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            detail = self._detail(tmp, jira=False)
+        self.assertIn(self.NO_JIRA, detail)
+        self.assertNotIn(self.NO_TASKS, detail)
+        self.assertNotIn(self.NO_MEETINGS, detail)
+
+    def test_no_inputs_names_all_three_as_undetermined(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            detail = self._detail(tmp, tasks=False, jira=False, meetings=False)
+        for missing in (self.NO_TASKS, self.NO_JIRA, self.NO_MEETINGS):
+            self.assertIn(missing, detail)
+
+
 if __name__ == "__main__":
     unittest.main()
