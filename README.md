@@ -38,7 +38,7 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 
 | いつ | 秘書に言う | 実行されるコマンド | EM の時間 | 出力の置き場 |
 |---|---|---|---|---|
-| 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/` |
+| 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/drafts/`（`make_draft.py nudge`） |
 | Slack を貼った後 | 先に匿名化済みの構造化 JSON を用意（手順は `slack-to-candidates` の SKILL.md）。そのうえで「Slack の依頼を候補に」 | `python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/tasks/candidates.json` |
 | 会議が終わった後 | 先に匿名化済みの構造化 JSON を用意（手順は `meeting-to-candidates` の SKILL.md）。そのうえで「会議メモを議事録と候補に」 | `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/outputs/drafts/`（議事録下書き・未送信）と `data/tasks/candidates.json` |
 | 返信案が要る | 「返信案を作って」 | `python3 scripts/make_draft.py slack-reply <input>.json --dry-run` → 外して保存 | 約2分/件 | `data/outputs/drafts/`（未送信。送るのは EM） |

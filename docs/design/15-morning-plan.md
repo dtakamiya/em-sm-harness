@@ -5,7 +5,7 @@
 ## 結論
 - 着手順 1 位（[12](12-secretary-job-list.md) §4）を、実接続なしで動く形にした: `skills/morning-plan/SKILL.md` + `scripts/morning_plan.py`
 - 対応する仕事は D1・D2・D3・D6 の一部。読み取り専用で、`data/` への書き込みも外部送信もしない（L0）
-- 催促の文面は SKILL 手順 3 で下書きに回す（L1）。送信は EM
+- 催促の文面は SKILL 手順 3 で `make_draft.py nudge` の下書きに回す（L1。型は `templates/drafts/nudge.md`）。送信は EM
 
 ## 入力と出力
 | 入力 | 扱い |

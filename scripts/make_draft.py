@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""下書き（Slack 返信案・Jira コメント案）を templates/drafts の型に流し込み、未送信の下書きとして保存する。
+"""下書き（Slack 返信案・Jira コメント案・催促案）を templates/drafts の型に流し込み、未送信の下書きとして保存する。
 
 L1（下書きまで）。stdlib のみ・外部接続なし。送信・投稿はしない。設計: templates/drafts/*.md と docs/design/14。
 入力 JSON は秘書（Claude）が組み立てる。このスクリプトは型への流し込みと 14 の機械検査（E1/E2/B4/D1 相当）だけを行う。
@@ -32,6 +32,11 @@ SCENES = {
         "types": ("回答", "受領のみ", "確認質問", "期限の相談"),
         "type_label": "返信の型",
         "source_keys": ("source_date", "source_id", "handle"),
+    },
+    "nudge": {
+        "types": ("初回の確認", "再確認"),
+        "type_label": "催促の型",
+        "source_keys": ("task_id", "handle", "observation"),
     },
     "jira-comment": {
         "types": ("状況確認", "ブロッカー確認", "仕様確認", "完了確認"),
@@ -90,7 +95,7 @@ def validate(scene, data):
         if not isinstance(body, str) or not body.strip():
             raise DraftError(f"variants[{i}] が空です")
         _check_text(f"variants[{i}]", body, single_line=False)
-        if scene == "jira-comment" and len(QUESTION.findall(body)) > 1:
+        if scene in ("jira-comment", "nudge") and len(QUESTION.findall(body)) > 1:
             raise DraftError(f"variants[{i}] は 1 コメント 1 問にしてください")
     decides = data.get("em_decides")
     if not isinstance(decides, list) or not 1 <= len(decides) <= MAX_EM_DECIDES:
@@ -108,6 +113,8 @@ def render(scene, data):
     head = f"{BANNER}{spec['type_label']}: {draft_type}"
     if scene == "slack-reply":
         head += f"\n出典: {data['source_date']}:{data['source_id']}（相手: {data['handle']}）"
+    elif scene == "nudge":
+        head += f"\n対象: {data['task_id']}（相手: {data['handle']}）\n観察: {data['observation']}"
     else:
         head += f"\n対象: {data['ticket_key']}（担当: {data['handle']}）\n観察: {data['observation']}"
     labels = ("案A（短く）", "案B（丁寧に）")
@@ -131,7 +138,7 @@ def write_draft(out_dir, scene, text, today):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="未送信の下書き（Slack 返信案・Jira コメント案）を作る")
+    ap = argparse.ArgumentParser(description="未送信の下書き（Slack 返信案・Jira コメント案・催促案）を作る")
     ap.add_argument("scene", choices=sorted(SCENES))
     ap.add_argument("input", type=Path, help="下書き入力 JSON（匿名化済み）")
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
