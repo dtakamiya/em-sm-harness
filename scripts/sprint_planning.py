@@ -10,8 +10,8 @@ import argparse
 import json
 import math
 import re
-from datetime import date
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -72,10 +72,13 @@ def _fail(message):
 
 def _day_of(value, what):
     """fetched_at の先頭 10 文字（YYYY-MM-DD）を日付にする。不正なら原因つきで終了する。"""
-    try:
-        return date.fromisoformat(str(value)[:10]) if isinstance(value, str) else None
-    except ValueError:
-        pass
+    if not isinstance(value, str):
+        return None
+    if re.match(r"\d{4}-\d{2}-\d{2}(?:[T ]|$)", value):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            pass
     _fail(f"{what} が日付（YYYY-MM-DD…）ではありません")
 
 

@@ -218,12 +218,12 @@ class HardeningTest(unittest.TestCase):
         return str(ctx.exception)
 
     def test_stale_history_adds_note_but_fresh_does_not(self):
-        self.assertNotIn("古い", _material())
+        self.assertNotIn("日前の取得です", _material())
         history = _load("done-sp.three.json")
         history["fetched_at"] = "2026-09-01T08:40:00+09:00"
         text = sp.build_material(_load("jira-cache.planning.json"), history, 9)
         self.assertIn("集計値は 38 日前の取得です", text)
-        self.assertLessEqual(len(_body(text)), MAX_BODY_CHARS + 60)
+        self.assertLessEqual(len(_body(text)), MAX_BODY_CHARS)
 
     def test_history_at_stale_boundary_has_no_note(self):
         history = _load("done-sp.three.json")
@@ -245,10 +245,24 @@ class HardeningTest(unittest.TestCase):
         self.assertNotIn("5.0SP", text)
 
     def test_rejects_invalid_story_points(self):
-        for bad in ("3", True, -1, float("nan")):
+        for bad in ("3", True, -1, float("nan"), float("inf")):
             cache = _load("jira-cache.planning.json")
             cache["issues"][0]["story_points"] = bad
             self.assertIn("story_points", self._exit_message(cache), repr(bad))
+
+    def test_rejects_non_string_key_status_and_history_fetched_at(self):
+        for field in ("key", "status_category"):
+            cache = _load("jira-cache.planning.json")
+            cache["issues"][0][field] = 123
+            self.assertIn(field, self._exit_message(cache))
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = 20261009
+        self.assertIn("fetched_at", self._exit_message(_load("jira-cache.planning.json"), history))
+
+    def test_rejects_loose_date_prefix(self):
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = "2026-10-09garbage"
+        self.assertIn("fetched_at", self._exit_message(_load("jira-cache.planning.json"), history))
 
     def test_malformed_cache_gives_cause_not_traceback(self):
         def broken(mutate):
