@@ -8,8 +8,10 @@
 """
 import argparse
 import json
+import math
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -18,6 +20,7 @@ from jira_metrics import REFETCH_MESSAGE, active_sprint  # noqa: E402
 HISTORY_WINDOW = 3  # 幅を出すのに要る終了済みスプリント件数（Q-035 a）。K = 3 固定
 MAX_BODY_CANDIDATES = 3  # 本文に出す候補（10 件以内・14 A2）。全件は詳細へ（33 P6）
 MAX_WORKDAYS = 60
+STALE_HISTORY_DAYS = 14  # 集計値の取得日がキャッシュ取得日よりこの日数を超えて古いと注記する
 PRIORITY_ORDER = ("highest", "high", "medium", "low", "lowest")
 HISTORY_KEYS = {"schema_version", "fetched_at", "project_alias", "sprints"}  # 06 §1: 全ファイルに schema_version と fetched_at
 HISTORY_SPRINT_KEYS = {"id", "name", "end", "done_sp"}  # 個人別・課題別は持ち込まない（06 §4）
@@ -63,10 +66,55 @@ def candidates(issues):
     return sorted(pool, key=lambda i: (_priority_rank(i), not is_carried(i), _natural_key(i["key"])))
 
 
+def _fail(message):
+    raise SystemExit(f"{message}。何も出力しません")
+
+
+def _day_of(value, what):
+    """fetched_at の先頭 10 文字（YYYY-MM-DD）を日付にする。不正なら原因つきで終了する。"""
+    if not isinstance(value, str):
+        return None
+    if re.match(r"\d{4}-\d{2}-\d{2}(?:[T ]|$)", value):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            pass
+    _fail(f"{what} が日付（YYYY-MM-DD…）ではありません")
+
+
+def _check_dicts(items, what):
+    if not isinstance(items, list) or not all(isinstance(x, dict) for x in items):
+        _fail(f"{what} がオブジェクトの配列ではありません")
+
+
+def validate_cache(cache):
+    """キャッシュの型を検査する（traceback でなく原因つきメッセージで終了）。complete=true のときだけ呼ぶ。"""
+    if _day_of(cache.get("fetched_at"), "キャッシュの fetched_at") is None:
+        _fail("キャッシュの fetched_at が文字列ではありません")
+    issues = cache.get("issues")
+    _check_dicts(issues, "キャッシュの issues")
+    for n, issue in enumerate(issues):
+        if not isinstance(issue.get("key"), str) or not isinstance(issue.get("status_category"), str):
+            _fail(f"issues[{n}] の key / status_category が文字列ではありません")
+        _check_dicts(issue.get("sprints", []), f"issues[{n}].sprints")
+        _check_dicts(issue.get("links", []), f"issues[{n}].links")
+        points = issue.get("story_points")
+        if points is not None and (isinstance(points, bool) or not isinstance(points, (int, float))
+                                   or not math.isfinite(points) or points < 0):
+            _fail(f"issues[{n}].story_points は 0 以上の数値か null にしてください")
+
+
+def _sp_text(points):
+    """小数 SP は小数のまま、整数値の float（5.0）は 5 と表示する。"""
+    return str(int(points)) if float(points).is_integer() else str(points)
+
+
 def validate_history(history, alias, as_of):
     """集計値の形式を検査して、終了日の新しい順に並べた sprints を返す。不正なら何も出さず終了する。as_of（キャッシュ取得日）より後に終わるスプリントは終了済みでないので弾く（06 §4）。"""
     if not isinstance(history, dict) or set(history) != HISTORY_KEYS:
         raise SystemExit(f"完了 SP の集計値の形式が不正です（キーは {sorted(HISTORY_KEYS)} のみ）。何も出力しません")
+    if _day_of(history["fetched_at"], "完了 SP の集計値の fetched_at") is None:
+        _fail("完了 SP の集計値の fetched_at が文字列ではありません")
     if history["project_alias"] != alias:
         raise SystemExit("完了 SP の集計値の project_alias がキャッシュと一致しません。何も出力しません")
     sprints = history["sprints"]
@@ -92,7 +140,7 @@ def _issue_label(issue, status_by_key):
     blocker = blocker_note(issue, status_by_key)
     notes = (["繰り越し"] if is_carried(issue) else []) + ([blocker] if blocker else [])
     tail = f"（{'・'.join(notes)}）" if notes else ""
-    return f"{issue['key']} {(issue.get('priority') or '未設定').lower()} {'未見積もり' if points is None else f'{points}SP'}{tail}"
+    return f"{issue['key']} {(issue.get('priority') or '未設定').lower()} {'未見積もり' if points is None else _sp_text(points) + 'SP'}{tail}"
 
 
 def _capacity_line(past, workdays):
@@ -105,9 +153,18 @@ def _capacity_line(past, workdays):
     return done, days
 
 
+def _history_age_days(history, cache_fetched_at):
+    if history is None:
+        return None
+    return (_day_of(cache_fetched_at, "キャッシュの fetched_at") - _day_of(history["fetched_at"], "集計値の fetched_at")).days
+
+
 def build_material(cache, history=None, workdays=None):
+    if not isinstance(cache, dict):
+        _fail("キャッシュの形式が不正です（オブジェクトではありません）")
     if not cache.get("complete", False):
         return f"{NOTICE}\n{REFETCH_MESSAGE}"
+    validate_cache(cache)
     issues = cache["issues"]
     status_by_key = {i["key"]: i["status_category"] for i in issues}
     pool = candidates(issues)
@@ -130,6 +187,9 @@ def build_material(cache, history=None, workdays=None):
             "容量の材料", f"- {done_line} ／ 繰り越し {carried} 件 ／ {days_line}", ASK, limit]
     if shortage:
         body.append("材料が足りません: " + "・".join(shortage))
+    age = _history_age_days(history, cache["fetched_at"])
+    if age is not None and age > STALE_HISTORY_DAYS:
+        body.append(f"注意: 集計値は {age} 日前の取得です。最新でない可能性があります（取得し直してください）")
     detail = [f"- 候補一覧（{cache['project_alias']}・{cache['fetched_at'][:10]}）"]
     detail += [f"  - {_issue_label(i, status_by_key)}" for i in pool]
     detail += [f"- 見積もり状況: 候補 {len(pool)} 件のうち SP 未見積もり {unestimated} 件（合計 SP は出しません。未見積もりは幅に含まれません）",

@@ -209,6 +209,75 @@ class FutureAndEdgeTest(unittest.TestCase):
         self.assertIn("EX-202 high 3SP（ブロッカー状態不明）", sp.build_material(cache, _load("done-sp.three.json"), 9))
 
 
+class HardeningTest(unittest.TestCase):
+    """emh-065: 集計値の鮮度・小数 SP・不正キャッシュ（traceback でなく原因つきメッセージ）。"""
+
+    def _exit_message(self, cache, history=None):
+        with self.assertRaises(SystemExit) as ctx:
+            sp.build_material(cache, history, 9)
+        return str(ctx.exception)
+
+    def test_stale_history_adds_note_but_fresh_does_not(self):
+        self.assertNotIn("日前の取得です", _material())
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = "2026-09-01T08:40:00+09:00"
+        text = sp.build_material(_load("jira-cache.planning.json"), history, 9)
+        self.assertIn("集計値は 38 日前の取得です", text)
+        self.assertLessEqual(len(_body(text)), MAX_BODY_CHARS)
+
+    def test_history_at_stale_boundary_has_no_note(self):
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = "2026-09-25T08:40:00+09:00"  # 14 日前
+        self.assertNotIn("日前の取得です", sp.build_material(_load("jira-cache.planning.json"), history, 9))
+
+    def test_rejects_history_with_bad_fetched_at(self):
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = "yesterday"
+        self.assertIn("fetched_at", self._exit_message(_load("jira-cache.planning.json"), history))
+
+    def test_fractional_story_points_are_shown_without_trailing_zero(self):
+        cache = _load("jira-cache.planning.json")
+        next(i for i in cache["issues"] if i["key"] == "EX-202")["story_points"] = 2.5
+        next(i for i in cache["issues"] if i["key"] == "EX-201")["story_points"] = 5.0
+        text = sp.build_material(cache, _load("done-sp.three.json"), 9)
+        self.assertIn("EX-202 high 2.5SP", text)
+        self.assertIn("EX-201 high 5SP", text)
+        self.assertNotIn("5.0SP", text)
+
+    def test_rejects_invalid_story_points(self):
+        for bad in ("3", True, -1, float("nan"), float("inf")):
+            cache = _load("jira-cache.planning.json")
+            cache["issues"][0]["story_points"] = bad
+            self.assertIn("story_points", self._exit_message(cache), repr(bad))
+
+    def test_rejects_non_string_key_status_and_history_fetched_at(self):
+        for field in ("key", "status_category"):
+            cache = _load("jira-cache.planning.json")
+            cache["issues"][0][field] = 123
+            self.assertIn(field, self._exit_message(cache))
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = 20261009
+        self.assertIn("fetched_at", self._exit_message(_load("jira-cache.planning.json"), history))
+
+    def test_rejects_loose_date_prefix(self):
+        history = _load("done-sp.three.json")
+        history["fetched_at"] = "2026-10-09garbage"
+        self.assertIn("fetched_at", self._exit_message(_load("jira-cache.planning.json"), history))
+
+    def test_malformed_cache_gives_cause_not_traceback(self):
+        def broken(mutate):
+            cache = _load("jira-cache.planning.json")
+            mutate(cache)
+            return self._exit_message(cache)
+        self.assertIn("issues", broken(lambda c: c.update(issues={"a": 1})))
+        self.assertIn("issues", broken(lambda c: c["issues"].__setitem__(0, "EX-1")))
+        self.assertIn("sprints", broken(lambda c: c["issues"][0].update(sprints="x")))
+        self.assertIn("links", broken(lambda c: c["issues"][0].update(links=[1])))
+        self.assertIn("fetched_at", broken(lambda c: c.update(fetched_at=20261009)))
+        with self.assertRaises(SystemExit):
+            sp.build_material([], None, 9)
+
+
 class CliTest(unittest.TestCase):
     def test_main_prints_material(self):
         out = io.StringIO()
