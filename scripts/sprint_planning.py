@@ -16,11 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from jira_metrics import REFETCH_MESSAGE, active_sprint  # noqa: E402
 
 HISTORY_WINDOW = 3  # 幅を出すのに要る終了済みスプリント件数（Q-035 a）。K = 3 固定
-MAX_LISTED = 10  # 詳細に並べる候補の上限。超過は件数のみ（14 A2）
-MAX_BODY_CANDIDATES = 3  # 本文に出す候補。残りは詳細へ
+MAX_BODY_CANDIDATES = 3  # 本文に出す候補（10 件以内・14 A2）。全件は詳細へ（33 P6）
 MAX_WORKDAYS = 60
 PRIORITY_ORDER = ("highest", "high", "medium", "low", "lowest")
-HISTORY_KEYS = {"schema_version", "project_alias", "sprints"}
+HISTORY_KEYS = {"schema_version", "fetched_at", "project_alias", "sprints"}  # 06 §1: 全ファイルに schema_version と fetched_at
 HISTORY_SPRINT_KEYS = {"id", "name", "end", "done_sp"}  # 個人別・課題別は持ち込まない（06 §4）
 
 NOTICE = "容量は過去の実績から見た目安で、約束ではありません。入れる量と中身は EM とチームが決めます"
@@ -46,12 +45,13 @@ def is_carried(issue):
     return len(issue.get("sprints", [])) >= 2 and issue["status_category"] != "done"
 
 
-def is_blocked(issue, status_by_key):
-    """blocks 系リンクの inward（塞がれている側）で、相手が done でないもの。相手がキャッシュに無ければ塞がれていると見る。"""
-    return any(
-        "block" in link["link_type"].lower() and link["direction"] == "inward"
-        and status_by_key.get(link["issue_key"]) != "done"
-        for link in issue.get("links", []))
+def blocker_note(issue, status_by_key):
+    """22 §2.4: flagged、または blocks の inward で塞ぐ側が未完了なら「ブロッカー有」。塞ぐ側が取得範囲外なら「ブロッカー状態不明」。無ければ None。"""
+    inward = [link["issue_key"] for link in issue.get("links", [])
+              if link["link_type"].lower() == "blocks" and link["direction"] == "inward"]
+    if issue.get("flagged") or any(status_by_key.get(key, "unknown") not in ("done", "unknown") for key in inward):
+        return "ブロッカー有"
+    return "ブロッカー状態不明" if any(key not in status_by_key for key in inward) else None
 
 
 def candidates(issues):
@@ -87,7 +87,8 @@ def validate_history(history, alias):
 
 def _issue_label(issue, status_by_key):
     points = issue.get("story_points")
-    notes = (["繰り越し"] if is_carried(issue) else []) + (["ブロッカー有"] if is_blocked(issue, status_by_key) else [])
+    blocker = blocker_note(issue, status_by_key)
+    notes = (["繰り越し"] if is_carried(issue) else []) + ([blocker] if blocker else [])
     tail = f"（{'・'.join(notes)}）" if notes else ""
     return f"{issue['key']} {(issue.get('priority') or '未設定').lower()} {'未見積もり' if points is None else f'{points}SP'}{tail}"
 
@@ -121,16 +122,14 @@ def build_material(cache, history=None, workdays=None):
         (f"過去スプリントが {HISTORY_WINDOW} 件未満（幅なし）", len(past) < HISTORY_WINDOW),
         ("稼働日数が未入力", workdays is None)) if lacking]
     window = min(len(past), HISTORY_WINDOW)
-    limit = f"限界: 完了 SP は終了済みスプリント {window} 件・SP なしは除外・{NOT_CORRECTED}・取得完全"
+    limit = f"限界: 完了 SP は終了済みスプリント {window} 件・SP なしは除外（未見積もりは幅に含まれない）・{NOT_CORRECTED}・取得完全"
     body = [f"🟡 S2 プランニング材料: 候補 {len(pool)} 件（未見積もり {unestimated} 件）。入れる量は EM が決める",
             NOTICE, CANDIDATE_HEADING, candidate_line,
             "容量の材料", f"- {done_line} ／ 繰り越し {carried} 件 ／ {days_line}", ASK, limit]
     if shortage:
         body.append("材料が足りません: " + "・".join(shortage))
     detail = [f"- 候補一覧（{cache['project_alias']}・{cache['fetched_at'][:10]}）"]
-    detail += [f"  - {_issue_label(i, status_by_key)}" for i in pool[:MAX_LISTED]]
-    if len(pool) > MAX_LISTED:
-        detail.append(f"  - ほか {len(pool) - MAX_LISTED} 件（件数のみ）")
+    detail += [f"  - {_issue_label(i, status_by_key)}" for i in pool]
     detail += [f"- 見積もり状況: 候補 {len(pool)} 件のうち SP 未見積もり {unestimated} 件（合計 SP は出しません。未見積もりは幅に含まれません）",
                f"- 固定文言: {NOTICE}",
                "- " + RANGE_NOTE.format(k=HISTORY_WINDOW)]

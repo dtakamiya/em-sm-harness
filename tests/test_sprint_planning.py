@@ -57,7 +57,19 @@ class CandidatesTest(unittest.TestCase):
         for i in cache["issues"]:
             if i["key"] == "EX-299":
                 i["status_category"] = "done"
-        self.assertNotIn("ブロッカー有", sp.build_material(cache, _load("done-sp.three.json"), 9))
+        self.assertNotIn("ブロッカー", sp.build_material(cache, _load("done-sp.three.json"), 9))
+
+    def test_flagged_issue_is_noted_as_blocker(self):
+        cache = _load("jira-cache.planning.json")
+        next(i for i in cache["issues"] if i["key"] == "EX-202")["flagged"] = True
+        self.assertIn("EX-202 high 3SP（ブロッカー有）", sp.build_material(cache, _load("done-sp.three.json"), 9))
+
+    def test_blocker_outside_fetched_range_is_unknown_not_assumed_blocked(self):
+        cache = _load("jira-cache.planning.json")
+        cache["issues"] = [i for i in cache["issues"] if i["key"] != "EX-299"]
+        text = sp.build_material(cache, _load("done-sp.three.json"), 9)
+        self.assertIn("EX-205 low 2SP（ブロッカー状態不明）", text)
+        self.assertNotIn("ブロッカー有", text)
 
 
 class MaterialTest(unittest.TestCase):
@@ -110,9 +122,9 @@ class MaterialTest(unittest.TestCase):
         cache["issues"] += [dict(base, key=f"EX-{900 + n}") for n in range(15)]
         text = sp.build_material(cache, _load("done-sp.three.json"), 9)
         self.assertLessEqual(len(_body(text)), MAX_BODY_CHARS)
+        self.assertLessEqual(len(re.findall(r"EX-\d+ ", _body(text).split("候補（")[1].split("容量の材料")[0])), 10)
         detail = text.split("\n\n詳細\n", 1)[1]
-        self.assertEqual(len(re.findall(r"^  - EX-", detail, re.M)), sp.MAX_LISTED)
-        self.assertIn("ほか 13 件（件数のみ）", detail)
+        self.assertEqual(len(re.findall(r"^  - EX-", detail, re.M)), 23)  # 詳細は全件
 
     def test_status_word_is_always_caution(self):
         for hist in ("done-sp.three.json", "done-sp.two.json"):
@@ -137,6 +149,7 @@ class MaterialTest(unittest.TestCase):
         self.assertIn("未見積もり 2 件", text)
         self.assertNotIn("合計 SP:", text)
         self.assertIn("未見積もりは幅に含まれません", text)
+        self.assertIn("未見積もりは幅に含まれない", _body(text))  # 限界の行（33 §4）
 
     def test_matches_design_sample_shape(self):
         design = (ROOT / "docs" / "design" / "33-sprint-planning-material.md").read_text(encoding="utf-8")
