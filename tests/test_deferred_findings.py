@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 DOC = Path(__file__).resolve().parent.parent / "docs" / "design" / "34-deferred-review-findings.md"
-ALLOWED_STATES = ("open", "不明", "解消（")
+STATE_RE = re.compile(r"^(open|不明|解消（#\d+.*）)$")
 
 
 def table_rows():
@@ -31,7 +31,7 @@ class DeferredFindingsTest(unittest.TestCase):
 
     def test_state_is_one_of_allowed(self):
         for row in table_rows():
-            self.assertTrue(row[5].startswith(ALLOWED_STATES), row)
+            self.assertRegex(row[5], STATE_RE, row)
 
     def test_source_names_pr_number(self):
         for row in table_rows():
@@ -41,9 +41,23 @@ class DeferredFindingsTest(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("内容は不明", text)
 
-    def test_no_secrets_or_urls(self):
+    def test_no_urls_emails_or_token_shapes(self):
         text = DOC.read_text(encoding="utf-8")
-        self.assertIsNone(re.search(r"https?://|@[A-Za-z0-9.-]+\.[a-z]{2,}", text))
+        pattern = r"https?://|@[A-Za-z0-9.-]+\.[a-z]{2,}|xox[bp]-|ghp_|AKIA[0-9A-Z]{8}|sk-[A-Za-z0-9]{10}"
+        self.assertIsNone(re.search(pattern, text))
+
+    def test_high_severity_is_not_deferred(self):
+        for row in table_rows():
+            self.assertNotIn("HIGH", row[1].upper(), row)
+
+    def test_status_summary_matches_table(self):
+        rows = table_rows()
+        states = [r[5] for r in rows]
+        open_n = sum(s == "open" for s in states)
+        unknown_n = sum(s == "不明" for s in states)
+        solved_n = sum(s.startswith("解消") for s in states)
+        expected = f"全{len(rows)}件 = open {open_n} / 不明 {unknown_n} / 解消 {solved_n}"
+        self.assertIn(expected, DOC.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
