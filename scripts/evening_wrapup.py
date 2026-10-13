@@ -123,6 +123,15 @@ def render_for_day(w, always):
     return render(w) if always or has_report(w) else _quiet_line(w)
 
 
+def _load_candidates(path):
+    """候補は付加情報。壊れていても締め全体は止めず、0 件扱いにして stderr に警告する。"""
+    try:
+        return _load(path, "candidates")
+    except SystemExit as exc:
+        print(f"警告: 候補を読めないため 0 件として扱います（{exc}）", file=sys.stderr)
+        return []
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="夕方の締めレポートを生成する（読み取り専用）")
     ap.add_argument("--tasks", default="data/tasks/tasks.json")
@@ -130,7 +139,7 @@ def main(argv=None):
     ap.add_argument("--today", default=date.today().isoformat())
     ap.add_argument("--always", action="store_true", help="出す内容がない日も全文を出す")
     args = ap.parse_args(argv)
-    wrapup = build_wrapup(_load(args.tasks, "tasks"), _day(args.today), _load(args.candidates, "candidates"))
+    wrapup = build_wrapup(_load(args.tasks, "tasks"), _day(args.today), _load_candidates(args.candidates))
     sys.stdout.write(render_for_day(wrapup, args.always))
 
 

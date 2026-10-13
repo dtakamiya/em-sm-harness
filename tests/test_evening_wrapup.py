@@ -177,6 +177,21 @@ class EveningWrapupTest(unittest.TestCase):
                 ew.main(["--tasks", "/nonexistent/tasks.json", "--candidates", str(path), "--today", "2026-10-05"])
         self.assertIn("未確認の候補 1 件", buf.getvalue())
 
+    def test_broken_or_malformed_candidates_file_warns_and_report_still_prints(self):
+        import contextlib
+        import io
+        import tempfile
+        for body in ("{壊れた", json.dumps({"candidates": "not-a-list"})):
+            with tempfile.TemporaryDirectory() as d:
+                path = Path(d) / "candidates.json"
+                path.write_text(body, encoding="utf-8")
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    ew.main(["--tasks", "/nonexistent/tasks.json", "--candidates", str(path), "--today", "2026-10-05"])
+            self.assertIn("夕方の締め 2026-10-05", out.getvalue())
+            self.assertNotIn("未確認の候補", out.getvalue())
+            self.assertIn("警告", err.getvalue())
+
     def test_busy_day_prints_full_report_by_default(self):
         self.assertEqual(ew.render_for_day(self.w, always=False), ew.render(self.w))
 
