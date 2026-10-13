@@ -31,8 +31,9 @@ AGENDA_SCENE = "one-on-one-agenda"
 MAX_OBSERVATIONS = 3
 MAX_INTERPRETATIONS = 2
 MAX_QUESTIONS = 3
+MAX_CARRYOVERS = 5
 CARRYOVER_STATUSES = ("完了", "継続", "未確認")
-JIRA_DERIVED = re.compile(r"jira_metrics|In Progress|他チケット|平均|中央値|サイクルタイム|ベロシティ|\bSP\b|ランキング|他のメンバー|チーム比")
+JIRA_DERIVED = re.compile(r"jira_metrics|滞留|In Progress|他チケット|平均|中央値|サイクルタイム|ベロシティ|(?<![A-Za-z])SP(?![A-Za-z])|ランキング|他のメンバー|チーム比")
 
 SCENES = {
     "slack-reply": {
@@ -95,12 +96,12 @@ def validate_agenda(data):
     handle = _need(data, "handle")
     if not HANDLE.fullmatch(handle):
         raise DraftError(f"handle は匿名ハンドルにしてください: {handle}")
-    if not DATE_RE.match(_need(data, "scheduled_date")):
+    if not DATE_RE.fullmatch(_need(data, "scheduled_date")):
         raise DraftError("scheduled_date は YYYY-MM-DD にしてください")
     _check_text("em_action", _need(data, "em_action"))
-    for i, c in enumerate(_items(data, "carryovers", 0, MAX_EM_DECIDES, "前回の持ち越し"), 1):
+    for i, c in enumerate(_items(data, "carryovers", 0, MAX_CARRYOVERS, "前回の持ち越し"), 1):
         _check_text(f"carryovers[{i}].action", _need(c, "action"))
-        if not DATE_RE.match(_need(c, "source_date")):
+        if not DATE_RE.fullmatch(_need(c, "source_date")):
             raise DraftError(f"carryovers[{i}].source_date は YYYY-MM-DD にしてください")
         if c.get("status") not in CARRYOVER_STATUSES:
             raise DraftError(f"carryovers[{i}].status は {'/'.join(CARRYOVER_STATUSES)} のいずれか")
@@ -128,7 +129,19 @@ def validate_agenda(data):
         raise DraftError("Jira 指標・他との比較は入力にできません（22 §1）。タスクと本人の発言だけを使ってください")
 
 
+def _stripped(value):
+    """検査した値と描画する値を一致させる（前後の空白・改行で型の行位置が崩れないように）。"""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return [_stripped(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _stripped(v) for k, v in value.items()}
+    return value
+
+
 def render_agenda(data):
+    data = _stripped(data)
     validate_agenda(data)
     carry = "\n".join(f"   - {c['action']} — 出典 {c['source_date']}（状態: {c['status']}）"
                       for c in data["carryovers"]) or "   - なし"

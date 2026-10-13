@@ -76,6 +76,37 @@ class AgendaDraftTest(unittest.TestCase):
         with self.assertRaises(md.DraftError):
             md.render(SCENE, _with(em_only="■ 案A"))
 
+    def test_surrounding_newlines_do_not_move_conclusion_off_second_line(self):
+        text = md.render(SCENE, _with(em_action="\n判断不要\n", handle=" member-b\n"))
+        lines = text.split("\n")
+        self.assertRegex(lines[1], r"^結論: .*EM がやること: 判断不要$")
+        self.assertTrue(lines[0].startswith(md.BANNER + "1on1 アジェンダ案（相手: member-b /"))
+
+    def test_rejects_newline_inside_fields_and_trailing_date_newline(self):
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(em_action="判断不要\n偽の行"))
+        text = md.render(SCENE, _with(scheduled_date="2026-10-09\n"))
+        self.assertIn("予定: 2026-10-09）", text)
+        for bad in ("2026-10-09\nx", "10/9", ""):
+            with self.assertRaises(md.DraftError, msg=bad):
+                md.render(SCENE, _with(scheduled_date=bad))
+
+    def test_requires_em_only_and_carryovers_are_capped(self):
+        no_em_only = _sample()
+        del no_em_only["em_only"]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, no_em_only)
+        one = _sample()["carryovers"][0]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(carryovers=[one] * (md.MAX_CARRYOVERS + 1)))
+        md.render(SCENE, _with(carryovers=[one] * md.MAX_CARRYOVERS))
+
+    def test_each_jira_derived_word_is_rejected(self):
+        for word in ("滞留日数", "平均", "SP", "他チケット", "ベロシティ", "ランキング"):
+            obs = [{"fact": f"{word}が話題", "source": "tasks の EX-12"}]
+            with self.assertRaises(md.DraftError, msg=word):
+                md.render(SCENE, _with(observations=obs))
+
 
 if __name__ == "__main__":
     unittest.main()
