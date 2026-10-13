@@ -278,7 +278,7 @@ class ApplyReplyTest(unittest.TestCase):
         self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "done")
 
     def test_reject_output_says_record_only(self):
-        self.assertIn("再提案の抑止は未実装", self.run_replies("却下 c-0002")[0])
+        self.assertIn("同じ出典は再提案されません", self.run_replies("却下 c-0002")[0])
 
     def test_invalid_schema_is_reported_not_traceback(self):
         bad = ('[]', '{}', '{"tasks": {}}', '{"tasks": [1]}', '{"tasks": [{"title": "idなし"}]}')
