@@ -26,6 +26,13 @@ MARKERS = ("■", "⟦", "⟧", BANNER, "出典:", "出典：", "対象:", "対�
 MAX_EM_DECIDES = 5
 QUESTION = re.compile(r"[？?]|か。")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 1on1 アジェンダ（O1）。22 §1: Jira 指標・比較を入力にしない。断定語は「〜の可能性」に直させる
+AGENDA_SCENE = "one-on-one-agenda"
+MAX_OBSERVATIONS = 3
+MAX_INTERPRETATIONS = 2
+MAX_QUESTIONS = 3
+CARRYOVER_STATUSES = ("完了", "継続", "未確認")
+JIRA_DERIVED = re.compile(r"jira_metrics|In Progress|他チケット|平均|中央値|サイクルタイム|ベロシティ|\bSP\b|ランキング|他のメンバー|チーム比")
 
 SCENES = {
     "slack-reply": {
@@ -72,6 +79,74 @@ def _check_text(label, text, single_line=True):
         raise DraftError(f"{label} に URL・トークンらしき文字列があります")
 
 
+def _items(data, key, low, high, label):
+    items = data.get(key)
+    if not isinstance(items, list) or not low <= len(items) <= high:
+        raise DraftError(f"{key}（{label}）は {low}〜{high} 件にしてください")
+    for i, item in enumerate(items, 1):
+        if not isinstance(item, dict):
+            raise DraftError(f"{key}[{i}] はオブジェクトにしてください")
+    return items
+
+
+def validate_agenda(data):
+    if not isinstance(data, dict):
+        raise DraftError("入力は JSON オブジェクトにしてください")
+    handle = _need(data, "handle")
+    if not HANDLE.fullmatch(handle):
+        raise DraftError(f"handle は匿名ハンドルにしてください: {handle}")
+    if not DATE_RE.match(_need(data, "scheduled_date")):
+        raise DraftError("scheduled_date は YYYY-MM-DD にしてください")
+    _check_text("em_action", _need(data, "em_action"))
+    for i, c in enumerate(_items(data, "carryovers", 0, MAX_EM_DECIDES, "前回の持ち越し"), 1):
+        _check_text(f"carryovers[{i}].action", _need(c, "action"))
+        if not DATE_RE.match(_need(c, "source_date")):
+            raise DraftError(f"carryovers[{i}].source_date は YYYY-MM-DD にしてください")
+        if c.get("status") not in CARRYOVER_STATUSES:
+            raise DraftError(f"carryovers[{i}].status は {'/'.join(CARRYOVER_STATUSES)} のいずれか")
+    for i, o in enumerate(_items(data, "observations", 1, MAX_OBSERVATIONS, "観察"), 1):
+        _check_text(f"observations[{i}].fact", _need(o, "fact"))
+        _check_text(f"observations[{i}].source", _need(o, "source"))
+    for i, c in enumerate(_items(data, "interpretations", 0, MAX_INTERPRETATIONS, "解釈の候補"), 1):
+        _check_text(f"interpretations[{i}].candidate", _need(c, "candidate"))
+        _check_text(f"interpretations[{i}].check", _need(c, "check"))
+        if "可能性" not in c["candidate"]:
+            raise DraftError(f"interpretations[{i}].candidate は「〜の可能性」の形にしてください（断定しない）")
+    questions = data.get("questions")
+    if not isinstance(questions, list) or not 1 <= len(questions) <= MAX_QUESTIONS:
+        raise DraftError(f"questions は 1〜{MAX_QUESTIONS} 件にしてください")
+    for i, q in enumerate(questions, 1):
+        if not isinstance(q, str) or not q.strip():
+            raise DraftError(f"questions[{i}] は空でない文字列にしてください")
+        _check_text(f"questions[{i}]", q)
+    _check_text("em_only", _need(data, "em_only"))
+    texts = [data["em_action"], data["em_only"], *questions]
+    for key, fields in (("carryovers", ("action",)), ("observations", ("fact", "source")),
+                        ("interpretations", ("candidate", "check"))):
+        texts += [item[f] for item in data[key] for f in fields]
+    if any(JIRA_DERIVED.search(t) for t in texts):
+        raise DraftError("Jira 指標・他との比較は入力にできません（22 §1）。タスクと本人の発言だけを使ってください")
+
+
+def render_agenda(data):
+    validate_agenda(data)
+    carry = "\n".join(f"   - {c['action']} — 出典 {c['source_date']}（状態: {c['status']}）"
+                      for c in data["carryovers"]) or "   - なし"
+    facts = "\n".join(f"   - {o['fact']}（出典: {o['source']}）" for o in data["observations"])
+    marks = "①②"
+    interp = "\n".join(f"   {marks[i]} {c['candidate']} → 確認: {c['check']}"
+                       for i, c in enumerate(data["interpretations"])) or "   なし（観察のみ）"
+    if len(data["observations"]) >= 2 and data["interpretations"]:
+        interp += "\n   （複数の観察は同時期に並んでいる＝共起。関係は未確認）"
+    questions = "\n".join(f"   - {q}" for q in data["questions"])
+    return (f"{BANNER}1on1 アジェンダ案（相手: {data['handle']} / 予定: {data['scheduled_date']}）\n"
+            f"結論: 準備済み。EM がやること: {data['em_action']}\n"
+            "目安: 30 分。話す比率は相手 7 : EM 3\n\n"
+            f"1. 前回の持ち越し（5分）\n{carry}\n2. 観察（事実）\n{facts}\n"
+            f"3. 解釈の候補（断定しない）\n{interp}\n4. 聞く問い\n{questions}\n"
+            f"5. 相手のターン（自由）\n⟦EM だけが扱う⟧ {data['em_only']}\n")
+
+
 def validate(scene, data):
     if scene not in SCENES:
         raise DraftError(f"未対応の場面です: {scene}（対応: {', '.join(SCENES)}）")
@@ -108,6 +183,8 @@ def validate(scene, data):
 
 
 def render(scene, data):
+    if scene == AGENDA_SCENE:
+        return render_agenda(data)
     draft_type = validate(scene, data)
     spec = SCENES[scene]
     head = f"{BANNER}{spec['type_label']}: {draft_type}"
@@ -138,8 +215,8 @@ def write_draft(out_dir, scene, text, today):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="未送信の下書き（Slack 返信案・Jira コメント案・催促案）を作る")
-    ap.add_argument("scene", choices=sorted(SCENES))
+    ap = argparse.ArgumentParser(description="未送信の下書き（Slack 返信案・Jira コメント案・催促案・1on1 アジェンダ案）を作る")
+    ap.add_argument("scene", choices=sorted([*SCENES, AGENDA_SCENE]))
     ap.add_argument("input", type=Path, help="下書き入力 JSON（匿名化済み）")
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     ap.add_argument("--today", type=date.fromisoformat, default=None)
