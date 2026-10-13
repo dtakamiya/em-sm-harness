@@ -8,7 +8,7 @@ description: EM の夕方の「締めレポート」を 60 秒で読める 1 枚
 設計: `docs/design/25-evening-wrapup.md` / 品質基準: `docs/design/14-output-quality-checklist.md`
 
 ## 手順
-1. `python3 scripts/evening_wrapup.py` を実行する（既定で `data/tasks/tasks.json` を読む。読み取り専用。持ち越し・新しい返信待ち・判断依頼がない日は 1 行だけ出る（Q-029 b）。全文が要るときは `--always`）
+1. `python3 scripts/evening_wrapup.py` を実行する（既定で `data/tasks/tasks.json` と `candidates.json` を読む（候補は件数 1 行のみ・0 件なら出ない）。読み取り専用。持ち越し・新しい返信待ち・判断依頼がない日は 1 行だけ出る（Q-029 b）。全文が要るときは `--always`）
 2. 出力を 14 の A〜E で自己点検する（合否は内部判定のみ。出力に載せない）
 3. EM に出力をそのまま返す。前置き・経緯説明は不要
 4. EM の返答（done・defer・drop 等）は朝の計画と同じ手順で定型語に直し、実行前に見せてから `apply_reply.py` で反映する（`docs/design/24-reply-apply.md`）

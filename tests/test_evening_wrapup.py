@@ -143,6 +143,55 @@ class EveningWrapupTest(unittest.TestCase):
             ew.main(["--tasks", "/nonexistent/tasks.json", "--today", "2026-10-05", "--always"])
         self.assertIn("## 詳細", buf.getvalue())
 
+    def test_pending_candidates_add_one_count_line_without_body(self):
+        cands = [{"id": f"c-000{i}", "title": "秘密の件名", "source_ref": "ref"} for i in (1, 2)]
+        out = ew.render(ew.build_wrapup(_tasks(), TODAY, cands))
+        self.assertIn("未確認の候補: 2 件\n", out)
+        self.assertNotIn("秘密の件名", out)
+        self.assertEqual(out.count("未確認の候補"), 1)
+
+    def test_no_pending_candidates_adds_nothing(self):
+        for cands in ([], [{"id": "c-1", "title": "x", "snooze_until": "2026-10-20"}]):
+            w = ew.build_wrapup([], TODAY, cands)
+            self.assertNotIn("未確認の候補", ew.render(w))
+            self.assertNotIn("未確認の候補", ew.render_for_day(w, always=False))
+        self.assertEqual(ew.render(ew.build_wrapup(_tasks(), TODAY)), ew.render(ew.build_wrapup(_tasks(), TODAY, [])))
+
+    def test_candidates_alone_keep_quiet_day_one_line(self):
+        # Q-029 b: 候補だけでは全文を出さない。1 行のまま件数だけ添える
+        w = ew.build_wrapup([], TODAY, [{"id": "c-0001", "title": "x", "source_ref": "r"}])
+        self.assertFalse(ew.has_report(w))
+        out = ew.render_for_day(w, always=False)
+        self.assertEqual(out.count("\n"), 1)
+        self.assertIn("未確認の候補 1 件は明朝の計画へ", out)
+
+    def test_main_reads_candidates_file(self):
+        import contextlib
+        import io
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "candidates.json"
+            path.write_text(json.dumps({"version": 1, "candidates": [{"id": "c-0001", "title": "x"}]}), encoding="utf-8")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ew.main(["--tasks", "/nonexistent/tasks.json", "--candidates", str(path), "--today", "2026-10-05"])
+        self.assertIn("未確認の候補 1 件", buf.getvalue())
+
+    def test_broken_or_malformed_candidates_file_warns_and_report_still_prints(self):
+        import contextlib
+        import io
+        import tempfile
+        for body in ("{壊れた", json.dumps({"candidates": "not-a-list"})):
+            with tempfile.TemporaryDirectory() as d:
+                path = Path(d) / "candidates.json"
+                path.write_text(body, encoding="utf-8")
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    ew.main(["--tasks", "/nonexistent/tasks.json", "--candidates", str(path), "--today", "2026-10-05"])
+            self.assertIn("夕方の締め 2026-10-05", out.getvalue())
+            self.assertNotIn("未確認の候補", out.getvalue())
+            self.assertIn("警告", err.getvalue())
+
     def test_busy_day_prints_full_report_by_default(self):
         self.assertEqual(ew.render_for_day(self.w, always=False), ew.render(self.w))
 

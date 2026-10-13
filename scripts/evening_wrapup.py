@@ -28,7 +28,7 @@ def _check_text(task):
     return f"確認予定 {_md(_day(task['next_check']))}" if task.get("next_check") else "確認予定未設定"
 
 
-def build_wrapup(tasks, today):
+def build_wrapup(tasks, today, candidates=()):
     tomorrow = today + timedelta(days=1)
     live = [t for t in tasks if _visible(t, today)]
     active = [t for t in live if t["status"] in ACTIVE]
@@ -36,6 +36,7 @@ def build_wrapup(tasks, today):
     deferred_ids = {t["id"] for t in deferred_today}
     return {
         "today": today,
+        "pending_candidates": [c for c in candidates if _visible(c, today)],
         "done": [t for t in tasks if _ops_on(t, today, ("done",))],
         "carry": [t for t in active if _day(t.get("due")) and _day(t["due"]) <= today and t["id"] not in deferred_ids],
         "deferred": deferred_today,
@@ -84,6 +85,8 @@ def render(w):
     out = [f"# 夕方の締め {today.isoformat()}", "", f"{status}: {head}", "",
            f"**EM がやること**: {'、'.join(todo) if todo else '対応不要'}",
            "", f"今日の完了: {len(w['done'])} 件"]
+    if w["pending_candidates"]:
+        out.append(f"未確認の候補: {len(w['pending_candidates'])} 件")
     out += _section("持ち越し（観察）", w["carry"], lambda t: _carry_line(t, today))
     out += _section("今日先送りした", w["deferred"], lambda t: f"{t['id']} {t['title']}")
     out += _section("今日動いた返信待ち（新規を含む）", w["new_waiting"],
@@ -110,7 +113,8 @@ def has_report(w):
 
 
 def _quiet_line(w):
-    parts = [f"{label} {len(w[key])} 件" for label, key in (("確認予定超過", "nudge_due"), ("今日先送り", "deferred")) if w[key]]
+    parts = [f"{label} {len(w[key])} 件" for label, key in (("確認予定超過", "nudge_due"), ("今日先送り", "deferred"),
+                                                       ("未確認の候補", "pending_candidates")) if w[key]]
     tail = f"。{'・'.join(parts)}は明朝の計画へ" if parts else ""
     return f"夕方の締め {w['today'].isoformat()}: 🟢 対応不要（出す内容なし{tail}）\n"
 
@@ -119,13 +123,24 @@ def render_for_day(w, always):
     return render(w) if always or has_report(w) else _quiet_line(w)
 
 
+def _load_candidates(path):
+    """候補は付加情報。壊れていても締め全体は止めず、0 件扱いにして stderr に警告する。"""
+    try:
+        return _load(path, "candidates")
+    except SystemExit as exc:
+        print(f"警告: 候補を読めないため 0 件として扱います（{exc}）", file=sys.stderr)
+        return []
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="夕方の締めレポートを生成する（読み取り専用）")
     ap.add_argument("--tasks", default="data/tasks/tasks.json")
+    ap.add_argument("--candidates", default="data/tasks/candidates.json")
     ap.add_argument("--today", default=date.today().isoformat())
     ap.add_argument("--always", action="store_true", help="出す内容がない日も全文を出す")
     args = ap.parse_args(argv)
-    sys.stdout.write(render_for_day(build_wrapup(_load(args.tasks, "tasks"), _day(args.today)), args.always))
+    wrapup = build_wrapup(_load(args.tasks, "tasks"), _day(args.today), _load_candidates(args.candidates))
+    sys.stdout.write(render_for_day(wrapup, args.always))
 
 
 if __name__ == "__main__":
