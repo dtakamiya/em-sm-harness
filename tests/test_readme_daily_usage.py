@@ -52,6 +52,13 @@ class ReadmeDailyUsageTest(unittest.TestCase):
         for label in ("朝", "Slack を貼った後", "夕方", "金曜"):
             self.assertIn(f"| {label}", self.body, label)
 
+    def test_weekly_meetings_paste_step_is_listed(self):
+        self.assertIn("| 週頭", self.body)
+        self.assertIn("data/meetings/meetings.json", self.body)
+        self.assertTrue((ROOT / "skills/proactive-scan/examples/meetings.sample.json").is_file())
+        doc15 = (ROOT / "docs/design/15-morning-plan.md").read_text(encoding="utf-8")
+        self.assertNotIn("カレンダー入力の形が未定", doc15)
+
     def test_no_real_data_markers(self):
         self.assertNotRegex(self.body, r"https?://|xox[bp]-|@[\w.-]+\.\w+")
 
