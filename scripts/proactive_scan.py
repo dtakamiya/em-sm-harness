@@ -25,8 +25,9 @@ JIRA_CACHE_OLD_BDAYS = 2
 MEDIUM_QUIET_BDAYS = 2
 PROMOTE_AFTER_SHOWS = 3
 NUDGES_BEFORE_DECISION = 2
+NOW_CAP = 3
 PRUNE_DAYS = 90
-RULE_LABELS = {"due": "期限", "blocker": "ブロッカー", "waiting": "返信待ち", "meeting": "会議準備", "stale": "動きなし"}
+RULE_LABELS = {"now_cap": "now 件数", "due": "期限", "blocker": "ブロッカー", "waiting": "返信待ち", "meeting": "会議準備", "stale": "動きなし"}
 ACTIVE = ("open", "doing")
 EXIT_NONE, EXIT_NOTIFY, EXIT_BROKEN = 0, 10, 2
 
@@ -116,6 +117,16 @@ def detect_waiting(tasks, today):
     return out
 
 
+def detect_now_cap(tasks):
+    """priority: now の open/doing が NOW_CAP 件を超えたら、下げる候補を聞く判断依頼を 1 件返す（Q-020・表示のみ）。"""
+    count = sum(t["status"] in ACTIVE and t.get("priority") == "now" for t in tasks)
+    if count <= NOW_CAP:
+        return []
+    return [finding("now_cap", "now", "中", f"の件数が {count} 件（目安 {NOW_CAP} 件）", decision=True,
+                    ask="どれかを soon に下げますか。下げるなら返答で教えてください（おすすめ: 期限の遠いものから・来週まで）。"
+                        "強制はせず、以後は繰り返しません")]
+
+
 def detect_meetings(meetings, tasks, today):
     by_id = {t["id"]: t for t in tasks}
     limit = next_bday(today)
@@ -147,7 +158,8 @@ def detect_stale(issues, tasks, today):
 
 def scan(tasks, issues, meetings, today):
     """入力が None のルールは走らせない（呼び出し側が「入力なし」を詳細に出す）。"""
-    found = detect_due(tasks, today) + detect_waiting(tasks, today) + detect_stale(issues or [], tasks, today)
+    found = (detect_due(tasks, today) + detect_waiting(tasks, today) + detect_now_cap(tasks)
+             + detect_stale(issues or [], tasks, today))
     if issues is not None:
         found += detect_blockers(issues, tasks, today)
     if meetings is not None:
@@ -254,8 +266,9 @@ def update_state(state, shown, decisions, today):
 
 def prune_state(state, live_keys, today):
     cutoff = today - timedelta(days=PRUNE_DAYS)
+    # now_cap は件数が目安内に戻ったら状態も消す（また超えたら、もう一度 1 回だけ聞くため）
     return {k: v for k, v in state.items()
-            if k in live_keys or (_day(v.get("last_shown")) or today) > cutoff}
+            if k in live_keys or (not k.startswith("now_cap:") and (_day(v.get("last_shown")) or today) > cutoff)}
 
 
 def apply_ack(state, key, snooze_until=None):
