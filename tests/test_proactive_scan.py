@@ -462,6 +462,54 @@ class ExpectedOutputTest(unittest.TestCase):
                 ps.main(argv)
         self.assertEqual(buf.getvalue(), (EXAMPLES / "expected-output.md").read_text(encoding="utf-8"))
 
+def now_tasks(n, **kw):
+    return [task(f"t-{i}", priority="now", **kw) for i in range(1, n + 1)]
+
+
+class NowCapTest(unittest.TestCase):  # emh-073 / Q-020: priority: now は 3 件まで。超えたら 1 回だけ聞く
+    def test_three_now_tasks_produce_no_finding(self):
+        self.assertEqual(ps.detect_now_cap(now_tasks(3)), [])
+
+    def test_four_now_tasks_produce_one_decision_finding(self):
+        found = ps.detect_now_cap(now_tasks(4))
+        self.assertEqual([(f["key"], f["level"], f["decision"]) for f in found], [("now_cap:now", "中", True)])
+        self.assertIn("4 件", found[0]["fact"])
+        self.assertIn("soon", found[0]["ask"])
+
+    def test_only_open_and_doing_now_tasks_are_counted(self):
+        tasks = now_tasks(3) + [task("t-9", priority="now", status="done"), task("t-8", priority="now", status="waiting",
+                                waiting_on="member-a", next_check="2026-10-09"), task("t-7", priority="soon")]
+        self.assertEqual(ps.detect_now_cap(tasks), [])
+
+    def test_shown_once_then_silent_on_following_days(self):
+        ws = Workspace(self, now_tasks(4))
+        shown, _, decisions, _ = ws.run(date(2026, 10, 7))
+        self.assertEqual(decisions, {"now_cap:now"})
+        self.assertIn("下げ", ps.render(shown, 0, decisions, TODAY))
+        for day in (8, 9, 12, 13):
+            shown, _, decisions, _ = ws.run(date(2026, 10, day))
+            self.assertEqual((shown, decisions), ([], set()))
+
+    def test_same_day_rerun_shows_the_same_request(self):
+        ws = Workspace(self, now_tasks(4))
+        first = ps.render(*ws.run()[:3], TODAY)
+        self.assertEqual(first, ps.render(*ws.run()[:3], TODAY))
+
+    def test_asks_again_after_count_dropped_to_three_and_rose_again(self):
+        ws = Workspace(self, now_tasks(4))
+        ws.run(date(2026, 10, 7))
+        ws.tasks_p.write_text(json.dumps({"tasks": now_tasks(3)}), encoding="utf-8")
+        ws.run(date(2026, 10, 8))
+        ws.tasks_p.write_text(json.dumps({"tasks": now_tasks(5)}), encoding="utf-8")
+        _, _, decisions, _ = ws.run(date(2026, 10, 9))
+        self.assertEqual(decisions, {"now_cap:now"})
+
+    def test_does_not_modify_tasks_file(self):
+        ws = Workspace(self, now_tasks(5))
+        before = ws.tasks_p.read_bytes()
+        ws.run()
+        self.assertEqual(ws.tasks_p.read_bytes(), before)
+
 
 if __name__ == "__main__":
     unittest.main()
