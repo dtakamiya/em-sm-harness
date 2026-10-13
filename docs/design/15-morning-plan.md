@@ -28,6 +28,6 @@
 - `python3 -m unittest discover -s tests` で 11 件（順序・snooze・催促・defer・上限・非破壊・欠損ファイル）
 
 ## 未決・次の一手
-- 会議準備（M1）: カレンダー入力の形が未定。EM に入力方法を確認（Q 起票候補）
+- 会議準備（M1）: 入力は決定済み（Q-023・EM が週頭に `meetings.json` を貼る。手順は [README](../../README.md) の『毎日の使い方』）。残りは試用で貼る手間が週1回で収まるかの判定。判定基準（仮置き）: 貼付が3分以内に終わる／試用2週間後に見直す。数値は EM の使用感で調整
 - Jira / Confluence 反映: 構造化スキーマ（[06](06-cache-schema.md)）と指標（emh-004）の後
 - 「今日の計画」の長さ・並べ順は、EM が実際に使った FB（[feedback-inbox](feedback-inbox.md)）で調整

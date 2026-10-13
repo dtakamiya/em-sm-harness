@@ -1,10 +1,16 @@
+import json
 import re
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 DAILY_SKILLS = ("morning-plan", "slack-to-candidates", "draft-reply", "evening-wrapup", "weekly-review", "proactive-scan")
+sys.path.insert(0, str(ROOT / "scripts"))
+import proactive_scan  # noqa: E402
+
 SCRIPT_RE = re.compile(r"scripts/([a-z_]+\.py)")
 FLAG_RE = re.compile(r"(?<![\w-])(--[a-z][a-z-]*)")
 
@@ -51,6 +57,26 @@ class ReadmeDailyUsageTest(unittest.TestCase):
     def test_covers_morning_paste_evening_friday(self):
         for label in ("朝", "Slack を貼った後", "夕方", "金曜"):
             self.assertIn(f"| {label}", self.body, label)
+
+    def test_weekly_meetings_paste_step_is_listed(self):
+        self.assertIn("| 週頭", self.body)
+        self.assertIn("data/meetings/meetings.json", self.body)
+        self.assertTrue((ROOT / "skills/proactive-scan/examples/meetings.sample.json").is_file())
+        doc15 = (ROOT / "docs/design/15-morning-plan.md").read_text(encoding="utf-8")
+        self.assertNotIn("カレンダー入力の形が未定", doc15)
+
+    def test_sample_meetings_pass_the_real_loader(self):
+        sample = ROOT / "skills/proactive-scan/examples/meetings.sample.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            *_, meetings = proactive_scan.load_inputs(Path(tmp) / "none.json", Path(tmp) / "none", sample)
+        self.assertTrue(meetings)
+
+    def test_loader_rejects_a_broken_meetings_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "meetings.json"
+            bad.write_text(json.dumps({"version": 1, "meetings": [{"id": "m-1", "title": "x"}]}), encoding="utf-8")
+            with self.assertRaises(proactive_scan.BrokenInput):
+                proactive_scan.load_inputs(Path(tmp) / "none.json", Path(tmp) / "none", bad)
 
     def test_no_real_data_markers(self):
         self.assertNotRegex(self.body, r"https?://|xox[bp]-|@[\w.-]+\.\w+")

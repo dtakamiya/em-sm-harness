@@ -38,6 +38,7 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 
 | いつ | 秘書に言う | 実行されるコマンド | EM の時間 | 出力の置き場 |
 |---|---|---|---|---|
+| 週頭（週1回） | 今週の会議一覧を `data/meetings/meetings.json` に貼る（形は `skills/proactive-scan/examples/meetings.sample.json`。各会議に id・title・start の日付、準備タスクがあれば prep_task_id）。会社の実データなのでコミットしない（`data/` は gitignore）。貼らない週は会議準備の検知だけ「入力なし」と1行出て、他の検知は動く | 貼ったあとは朝の計画（`python3 scripts/morning_plan.py --proactive`）で会議準備が出る | 約3分 | `data/meetings/meetings.json` |
 | 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/drafts/`（`make_draft.py nudge`） |
 | Slack を貼った後 | 先に匿名化済みの構造化 JSON を用意（手順は `slack-to-candidates` の SKILL.md）。そのうえで「Slack の依頼を候補に」 | `python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/tasks/candidates.json` |
 | 会議が終わった後 | 先に匿名化済みの構造化 JSON を用意（手順は `meeting-to-candidates` の SKILL.md）。そのうえで「会議メモを議事録と候補に」 | `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/outputs/drafts/`（議事録下書き・未送信）と `data/tasks/candidates.json` |
