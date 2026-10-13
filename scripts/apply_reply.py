@@ -110,7 +110,8 @@ def apply_one(state, op, target, extra, today, archive_dir):
         rest = [c for c in cands if c["id"] != target]
         if op == "reject":
             entry = {"source": cand.get("source"), "source_ref": cand.get("source_ref"), "at": today.isoformat()}
-            return {**state, "candidates": rest, "rejected": [*rejected, entry]}, f"✗ {target} 却下（出典を記録。同じ出典は再提案されません）"
+            note = "同じ出典は再提案されません" if entry["source_ref"] else "出典（source_ref）が無いため再提案は止まりません"
+            return {**state, "candidates": rest, "rejected": [*rejected, entry]}, f"✗ {target} 却下（出典を記録。{note}）"
         if op == "later":
             until = _day(extra[0], "日付") if extra else today + timedelta(days=LATER_DAYS)
             kept = [{**c, "snooze_until": until.isoformat()} if c["id"] == target else c for c in cands]

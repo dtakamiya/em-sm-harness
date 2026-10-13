@@ -277,8 +277,12 @@ class ApplyReplyTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 2)
         self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "done")
 
-    def test_reject_output_says_record_only(self):
+    def test_reject_output_says_resuggestion_blocked_when_source_ref_exists(self):
         self.assertIn("同じ出典は再提案されません", self.run_replies("却下 c-0002")[0])
+
+    def test_reject_output_warns_when_source_ref_is_missing(self):
+        self.write("candidates.json", "candidates", [cand("c-0009", None)])
+        self.assertIn("再提案は止まりません", self.run_replies("却下 c-0009")[0])
 
     def test_invalid_schema_is_reported_not_traceback(self):
         bad = ('[]', '{}', '{"tasks": {}}', '{"tasks": [1]}', '{"tasks": [{"title": "idなし"}]}')
