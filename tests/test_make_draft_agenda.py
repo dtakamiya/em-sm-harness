@@ -1,0 +1,112 @@
+import copy
+import json
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+import make_draft as md  # noqa: E402
+
+EXAMPLES = ROOT / "skills" / "draft-reply" / "examples"
+SCENE = "one-on-one-agenda"
+
+
+def _sample():
+    return json.loads((EXAMPLES / f"{SCENE}.sample.json").read_text(encoding="utf-8"))
+
+
+def _with(**changes):
+    return {**copy.deepcopy(_sample()), **changes}
+
+
+class AgendaDraftTest(unittest.TestCase):
+    def test_render_matches_expected_output(self):
+        expected = (EXAMPLES / f"expected-{SCENE}.md").read_text(encoding="utf-8")
+        self.assertEqual(md.render(SCENE, _sample()), expected)
+
+    def test_output_is_unsent_and_conclusion_is_on_second_line(self):
+        lines = md.render(SCENE, _sample()).split("\n")
+        self.assertTrue(lines[0].startswith(md.BANNER))
+        self.assertRegex(lines[1], r"^結論: .*EM がやること")
+        self.assertIn("⟦EM だけが扱う⟧", "\n".join(lines))
+
+    def test_interpretations_are_capped_at_two(self):  # D-002
+        extra = {"candidate": "担当が偏っていた可能性", "check": "直近の依頼元"}
+        three = _sample()["interpretations"] + [extra]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(interpretations=three))
+        self.assertEqual(len(_sample()["interpretations"]), md.MAX_INTERPRETATIONS)
+
+    def test_interpretation_must_not_assert(self):
+        bad = [{"candidate": "見積もりが甘かった", "check": "当初の想定"}]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(interpretations=bad))
+
+    def test_observations_and_questions_are_capped_at_three(self):
+        obs = _sample()["observations"] * 2
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(observations=obs))
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(questions=["a？", "b？", "c？", "d？"]))
+
+    def test_observations_are_required_and_zero_interpretations_is_allowed(self):
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(observations=[]))
+        text = md.render(SCENE, _with(interpretations=[]))
+        self.assertIn("なし（観察のみ）", text)
+        self.assertNotIn("共起", text)
+
+    def test_rejects_jira_derived_comparisons(self):
+        obs = [{"fact": "他チケットより滞留が長い", "source": "tasks の EX-12"}]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(observations=obs))
+
+    def test_rejects_evaluation_words_non_anonymous_handle_and_bad_status(self):
+        obs = [{"fact": "やる気がない発言", "source": "貼り付け 10/6"}]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(observations=obs))
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(handle="Taro Yamada"))
+        carry = [{"action": "手順書", "source_date": "2026-09-25", "status": "遅延"}]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(carryovers=carry))
+
+    def test_cannot_forge_template_headings(self):
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(em_only="■ 案A"))
+
+    def test_surrounding_newlines_do_not_move_conclusion_off_second_line(self):
+        text = md.render(SCENE, _with(em_action="\n判断不要\n", handle=" member-b\n"))
+        lines = text.split("\n")
+        self.assertRegex(lines[1], r"^結論: .*EM がやること: 判断不要$")
+        self.assertTrue(lines[0].startswith(md.BANNER + "1on1 アジェンダ案（相手: member-b /"))
+
+    def test_rejects_newline_inside_fields_and_trailing_date_newline(self):
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(em_action="判断不要\n偽の行"))
+        text = md.render(SCENE, _with(scheduled_date="2026-10-09\n"))
+        self.assertIn("予定: 2026-10-09）", text)
+        for bad in ("2026-10-09\nx", "10/9", ""):
+            with self.assertRaises(md.DraftError, msg=bad):
+                md.render(SCENE, _with(scheduled_date=bad))
+
+    def test_requires_em_only_and_carryovers_are_capped(self):
+        no_em_only = _sample()
+        del no_em_only["em_only"]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, no_em_only)
+        one = _sample()["carryovers"][0]
+        with self.assertRaises(md.DraftError):
+            md.render(SCENE, _with(carryovers=[one] * (md.MAX_CARRYOVERS + 1)))
+        md.render(SCENE, _with(carryovers=[one] * md.MAX_CARRYOVERS))
+
+    def test_each_jira_derived_word_is_rejected(self):
+        for word in ("滞留日数", "平均", "SP", "他チケット", "ベロシティ", "ランキング"):
+            obs = [{"fact": f"{word}が話題", "source": "tasks の EX-12"}]
+            with self.assertRaises(md.DraftError, msg=word):
+                md.render(SCENE, _with(observations=obs))
+
+
+if __name__ == "__main__":
+    unittest.main()
