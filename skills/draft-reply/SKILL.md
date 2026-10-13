@@ -22,7 +22,7 @@ description: Slack 返信案・Jira コメント案を、templates/drafts の型
 ## してはいけないこと
 - Slack / Jira への書き込み・送信、トークン使用
 - 相手の意図の断定、評価語。人への評価に読める言い回し
-- 1on1・報告・議事録・レトロの下書きは未対応（emh-008 の設計待ち）
+- 1on1・報告・議事録・レトロの下書きは、型は `templates/drafts` にあるが、このスキルの場面・検証には未対応
 
 ## 試す
 `python3 scripts/make_draft.py slack-reply skills/draft-reply/examples/slack-reply.sample.json --dry-run`（全て架空）

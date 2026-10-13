@@ -21,7 +21,7 @@ data/tasks/
   tasks.json        # 現役タスク（open/doing/waiting）
   archive/YYYY-MM.json  # done/dropped を月次で移送（直近の参照用に30日は tasks.json に残す）
   candidates.json   # 取り込みで見つかった「タスク候補」。EM が確定するまでここ
-  rejected.json     # 却下した候補の出典（記録のみ。再提案の抑止は取り込み実装時に参照する）
+  rejected.json     # 却下した候補の出典（取り込みスクリプトが再提案の抑止に参照する）
   *.bak / .last-reply.json  # 返答反映の直前状態と取り消し用の記録（24 参照）
 ```
 更新は「一時ファイルに書いて rename」で原子的に行う（途中で壊れて全タスクを失わない）。更新前の `tasks.json` は `tasks.json.bak` に1世代残す。
@@ -87,7 +87,7 @@ EM は自然言語で依頼 → 秘書が下記の操作に解釈して実行し
 ## 取り込みとタスク候補
 1. 取り込み（Slack 構造化データの「依頼」・Jira の EM アサイン・Confluence アクション）から **候補**を `candidates.json` に作る。`tasks.json` へは直接入れない
 2. 重複判定: `source` + `source_ref` が同一なら同一候補とみなし、新規にしない。参照が無いものは title の類似で「重複の疑い」と表示するだけ（自動マージしない）
-3. 朝の計画で候補を最大5件まとめて提示 → EM が「採用/却下/後で」を返す。却下は `source_ref` を `rejected.json` に記録するのみ（再提案の抑止は未実装。[24](24-reply-apply.md)）
+3. 朝の計画で候補を最大5件まとめて提示 → EM が「採用/却下/後で」を返す。却下は `source_ref` を `rejected.json` に記録し、取り込みスクリプトが同じ出典を再提案しない（[24](24-reply-apply.md)）
 4. 外部の状態変化（Jira が Done になった等）は、該当タスクを「**完了候補**」として EM に提示するだけ。自動で `done` にしない
 
 ## 秘書の動き
