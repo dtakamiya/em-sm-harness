@@ -72,15 +72,15 @@ def is_sensitive(text, words):
     return any(w in folded for w in words)
 
 
-def split_front_matter(text):
-    """先頭の任意見出し（--- で囲む）を読む。既知キー以外は無視する。"""
+def split_front_matter(text, keys=META_KEYS):
+    """先頭の任意見出し（--- で囲む）を読む。keys 以外のキーは無視する（会議メモ側は meeting_preprocess が keys を渡す）。"""
     match = FRONT_MATTER.match(text)
     if not match:
         return {}, text
     meta = {}
     for line in match.group(1).splitlines():
         m = META_LINE.match(line.strip())
-        if m and m.group("key") in META_KEYS:
+        if m and m.group("key") in keys:
             meta[m.group("key")] = m.group("value")
     return meta, text[match.end():]
 

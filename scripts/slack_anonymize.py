@@ -209,7 +209,7 @@ def output_name(masked_source_file, anon_sha256):
 def write_new_private(target, body):
     """既存を上書きせず（O_EXCL）、自分だけ読める 0600 で作る。"""
     if target.exists():
-        raise AnonymizeError("出力先が既にあります。上書きしません（同じ内容を匿名化済み）")
+        raise AnonymizeError("同名の匿名化済みファイルが既にあります。上書きしません")
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -218,7 +218,7 @@ def write_new_private(target, body):
             f.write(body)
         os.link(tmp, target)  # 既にあれば失敗（上書きしない）
     except FileExistsError:
-        raise AnonymizeError("出力先が既にあります。上書きしません（同じ内容を匿名化済み）")
+        raise AnonymizeError("同名の匿名化済みファイルが既にあります。上書きしません")
     finally:
         tmp.unlink(missing_ok=True)
 
