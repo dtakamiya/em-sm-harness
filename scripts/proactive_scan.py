@@ -396,13 +396,19 @@ def _write_error(path, exc):
     return WriteFailed(f"{path} に書き込めません（{exc.strerror or type(exc).__name__}）")
 
 
+def _atomic_write_bytes(path, content):
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(content)
+    os.replace(tmp, path)
+
+
 def save_state(path, state):
     path = Path(path)
     tmp = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
-            path.with_suffix(".json.bak").write_bytes(path.read_bytes())
+            _atomic_write_bytes(path.with_suffix(".json.bak"), path.read_bytes())
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         try:
             fh = os.fdopen(fd, "w", encoding="utf-8")

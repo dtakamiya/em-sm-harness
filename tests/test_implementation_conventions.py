@@ -23,14 +23,18 @@ def job_rows():
 class JobListCountTest(unittest.TestCase):
     def test_summary_counts_match_table_rows(self):
         text = JOB_LIST.read_text(encoding="utf-8")
-        summary = tuple(int(n) for n in SUMMARY_RE.search(text).groups())
+        match = SUMMARY_RE.search(text)
+        self.assertIsNotNone(match, "12 の §1 に『先回り N / 下書き N / EM が決める N』の行が見つかりません")
+        summary = tuple(int(n) for n in match.groups())
         categories = [c for _, c in job_rows()]
         actual = tuple(categories.count(k) for k in CATEGORY_LABELS)
         self.assertEqual(summary, actual)
 
     def test_total_matches_table_rows(self):
         text = JOB_LIST.read_text(encoding="utf-8")
-        self.assertEqual(int(TOTAL_RE.search(text).group(1)), len(job_rows()))
+        match = TOTAL_RE.search(text)
+        self.assertIsNotNone(match, "12 の §1 に『計N項目』の記述が見つかりません")
+        self.assertEqual(int(match.group(1)), len(job_rows()))
 
     def test_every_row_has_a_known_category_and_unique_id(self):
         rows = job_rows()
