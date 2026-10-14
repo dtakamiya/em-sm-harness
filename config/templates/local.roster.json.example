@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "_comment": "架空の名簿の雛形。現地で `cp config/templates/local.roster.json.example config/local.roster.json` して実名簿に差し替える（config/local.* は gitignore）。1 人 = names の配列（表記ゆれ・愛称を全部入れる。先頭が正規名）。",
+  "em": { "names": ["EM", "Eve Manager", "イブ"] },
+  "people": [
+    { "names": ["Alice Example", "Alice", "アリス"] },
+    { "names": ["Bob Sample", "Bob", "ボブ"] },
+    { "names": ["Carol Demo", "Carol"] }
+  ],
+  "orgs": ["Example Corp"],
+  "allow_words": ["Slack Bot"]
+}

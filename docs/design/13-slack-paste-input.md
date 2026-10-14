@@ -46,7 +46,10 @@ Bob Sample  10:40
 - **方式**: 発言者名・メンション・本文中の人名を、ローカル名簿（`config/local.*` の `roster`）で `m_` + HMAC-SHA256(ローカル鍵, 正規化した名前) の先頭 6 桁に置換。**状態を持たない**ので対応表の破損が起きない（[06 §2](06-cache-schema.md) の `assignee_ref` と同じ考え方）。鍵は環境変数名のみ設計書に記載
 - EM 本人は固定ハンドル `em`。`@EM` / 名前呼びはすべて `em` に寄せる
 - 逆引き（ハンドル → 実名）は**ローカルのスクリプトが出力を整形する最後の段階でのみ**行う。構造化データには実名を戻さない
-- 名簿に無い人名は置換できない。漏れの検出として「大文字始まりの連続語・敬称付き語」を `unmasked_suspects[]` に数だけ記録し、EM に名簿追加を促す（内容は出さない）
+- 名簿に無い人名は置換できない。置換後に「連続する大文字始まりの語・Latin 名 + 敬称・漢字/カタカナ + 敬称・名簿外の `@メンション`・名簿外の発言者」が残ったら**何も書かずに停止**する（emh-076）。報告は件数とメッセージ ID だけで、語は出さない。普通の語の誤検知は名簿の `allow_words` に足して再実行する
+- 検出の限界（名簿での置換が主、検出は漏れ防止の補助）: 敬称のない漢字の姓だけ・ひらがなのみの名前・単独の Latin 名（敬称なし）は検出できない。これらは名簿に表記ゆれごと載せる
+- 名簿は stdlib のみで読むため JSON（`config/local.roster.json`、雛形 `config/templates/local.roster.json.example`・架空）。形は `em.names[]` / `people[].names[]`（先頭が正規名）/ `orgs[]` / `allow_words[]`。名前は 2 文字以上・重複不可。鍵は環境変数 `EM_HARNESS_ANON_KEY`（値は書かない）。鍵・名簿が無い／不正なら止める
+- 出力に元メッセージのハッシュ（実名を含む入力のハッシュ）は持ち込まない。anon を読む側は `load_anon()` だけを使い、`anon/` 直下の匿名化済みマーカー付きファイル以外（`parsed/` 等の raw 相当・シンボリックリンク経由を含む）と、保持 14 日を過ぎたファイルは読まない
 - 社外の組織名・顧客名・URL は `[URL]` / `[org]` に置換。Jira キー形式はそのまま残す（突合に使う）
 - 匿名化済みは `data/inbox/slack/anon/` に書く。保持は raw と同じ（§8）
 
@@ -125,10 +128,11 @@ Bob Sample  10:40
 ## 10. 実装段階
 1. 前処理・匿名化スクリプト（ローカル決定的）+ 架空サンプル（`tests/fixtures/slack-paste/`）で単体テスト
    - 実装済み（`tests/test_slack_preprocess.py`）: 緩い形式の解釈 / 本文行の誤認防止 / 機微語（正規化込み）/ 重複再貼り付け / 同名出力の非上書き / 読めない入力 / fail-closed（§8）
-   - 未実装（匿名化の項目で）: 名簿外の人名 / 40字超の引用
+   - 匿名化は実装済み `scripts/slack_anonymize.py`（emh-076。名簿外の人名で停止・anon の読み口 `load_anon()`・14 日超は読まない。**14 日超ファイルの削除（パージ）は未実装**）
+   - 未実装: 40字超の引用（抽出側）
 2. JSON Schema と検証（不一致で書かない）
 3. 抽出スキル（匿名化済みのみ読む）を架空サンプルで磨く。評価観点は emh-006（抽出観点の定義）
-4. candidates 連携（04）: 実装済み `scripts/slack_to_candidates.py` / スキル `skills/slack-to-candidates`（emh-032）。前処理の分解・重複除外・機微語スキップは実装済み `scripts/slack_preprocess.py`（emh-075。機微語は `config/local.sensitive-words.txt`、1 行 1 語。fail-closed は §8 参照。出力は `data/inbox/slack/parsed/`）。匿名化・抽出スキル本体（1 の匿名化部分と 2〜3）は未実装で、構造化 JSON は §6 の形で用意されている前提
+4. candidates 連携（04）: 実装済み `scripts/slack_to_candidates.py` / スキル `skills/slack-to-candidates`（emh-032）。前処理の分解・重複除外・機微語スキップは実装済み `scripts/slack_preprocess.py`（emh-075。機微語は `config/local.sensitive-words.txt`、1 行 1 語。fail-closed は §8 参照。出力は `data/inbox/slack/parsed/`）。抽出スキル本体（2〜3）は未実装で、構造化 JSON は §6 の形で用意されている前提
 
 ## 11. 未決事項
 - Slack 貼り付けの保持期間（Q-016）
