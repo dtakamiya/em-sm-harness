@@ -121,7 +121,7 @@ Bob Sample  10:40
 1. 前処理・匿名化スクリプト（ローカル決定的）+ 架空サンプル（`tests/fixtures/slack/`）で単体テスト: 緩い形式の解釈 / 名簿外の人名 / 機微語 / 重複再貼り付け / 40字超の引用
 2. JSON Schema と検証（不一致で書かない）
 3. 抽出スキル（匿名化済みのみ読む）を架空サンプルで磨く。評価観点は emh-006（抽出観点の定義）
-4. candidates 連携（04）: 実装済み `scripts/slack_to_candidates.py` / スキル `skills/slack-to-candidates`（emh-032）。前処理・匿名化・抽出スキル本体（1〜3）は未実装で、構造化 JSON は §6 の形で用意されている前提
+4. candidates 連携（04）: 実装済み `scripts/slack_to_candidates.py` / スキル `skills/slack-to-candidates`（emh-032）。前処理の分解・重複除外・機微語スキップは実装済み `scripts/slack_preprocess.py`（emh-075。機微語は `config/local.sensitive-words.txt`、1 行 1 語・無い／空なら止める。出力は `data/inbox/slack/parsed/`）。匿名化・抽出スキル本体（1 の匿名化部分と 2〜3）は未実装で、構造化 JSON は §6 の形で用意されている前提
 
 ## 11. 未決事項
 - Slack 貼り付けの保持期間（Q-016）
