@@ -128,6 +128,16 @@ class MainTest(unittest.TestCase):
         self.assertEqual(len(json.loads(out)["meetings"]), 3)
         self.assertIn("7 行目: 謎の行", err)
 
+    def test_zero_meetings_warns_and_writes_nothing(self):
+        target = self.dir / "meetings.json"
+        for body in ("", "\n  \n", "10/12\n"):
+            self.paste.write_text(body, encoding="utf-8")
+            code, out, err = self.run_main(str(self.paste), "--year", "2026", "--out", str(target))
+            self.assertEqual(code, 1)
+            self.assertEqual(out, "")
+            self.assertIn("1 件も読み取れません", err)
+            self.assertFalse(target.exists())
+
     def test_missing_paste_file_exits_2(self):
         code, _, err = self.run_main(str(self.dir / "none.txt"))
         self.assertEqual(code, 2)

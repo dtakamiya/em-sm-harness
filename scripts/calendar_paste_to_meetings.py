@@ -6,6 +6,7 @@
   時刻は 10:00 / 10:00-11:00 / 10:00am / 終日 / All day。時刻と題名が同じ行で、日付見出しの直後に並ぶ形を想定。
 - 読めなかった行は捨てず、行番号つきで stderr に報告する。日付見出しらしいのに解釈できない行（2/30 など）の後は、
   次の正しい見出しまでの会議も「読めなかった行」にする（前の日付に黙って付けない）。
+- 会議が 0 件（空の貼り付け含む）のときも書かず警告して終了コード 1。
 - 読めなかった行が 1 件でもあれば終了コード 1。--out には書かない（直して再実行できるように）。標準出力のときだけ変換結果を出す。
 - prep_task_id は常に null（準備タスクの紐付けは EM が後で決める）。id は連番で、貼り直すと変わり得る。
 - 年は見出しに無ければ --year（既定: 今年）。12 月→1 月の週は、1 月側の見出しに年を付ける（例: 2027-01-04）。
@@ -104,6 +105,9 @@ def main(argv=None):
         return 2
     meetings, unreadable = convert(text, args.year)
     payload = json.dumps(build_document(meetings), ensure_ascii=False, indent=1) + "\n"
+    if not meetings and not unreadable:
+        print("会議が 1 件も読み取れませんでした（空の貼り付け？）。何も書いていません", file=sys.stderr)
+        return 1
     if args.out and unreadable:
         print("読めなかった行があるため --out には書いていません（直して再実行してください）", file=sys.stderr)
     elif args.out:
