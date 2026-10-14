@@ -8,6 +8,7 @@ description: 匿名化・構造化済みの会議メモ（structured JSON）か�
 設計: `docs/design/28-meeting-notes-input.md` §6〜§7 / 下書きの型: `templates/drafts/meeting-minutes.md`
 
 ## 手順
+0. 貼られた生メモは先に `python3 scripts/meeting_preprocess.py <メモ>.md` で匿名化する（`data/inbox/meeting/<held_on>-<alias>.md` に出る。人事系の語・名簿外の人名があれば何も書かず止まる）。抽出は匿名化済みのファイルだけを読む
 1. 構造化 JSON（`data/structured/meeting/<file>.json`、匿名化済みのみ）を用意する。形は 28 §3（実名・メモ原文は書かない）
 2. `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` で議事録下書きと追加予定の候補を見せる
 3. EM が問題なければ `--dry-run` を外して実行する（下書きは `data/outputs/drafts/<元名>-minutes.md`、候補は `data/tasks/candidates.json` に追記。直前の候補は `candidates.json.pre-meeting.bak` に退避）
