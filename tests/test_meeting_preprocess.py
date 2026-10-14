@@ -88,7 +88,7 @@ class MeetingPreprocessTest(unittest.TestCase):
         paste.write_text(FRONT + "- ok\n- Zed Unknown がレビューする\n", encoding="utf-8")
         code, _, err = self.run_main(paste)
         self.assertEqual(code, 2)
-        self.assertIn("2 行目", err)
+        self.assertIn("元ファイルの 6 行目", err)  # front matter 4 行 + 本文 2 行目
         self.assertNotIn("Zed", err)
         self.assertFalse(self.out.exists())
 
@@ -151,7 +151,7 @@ class MeetingPreprocessTest(unittest.TestCase):
         paste.write_text(FRONT + "## 決定\n- ok\n- 山本: 対応する\n", encoding="utf-8")
         code, _, err = self.run_main(paste)
         self.assertEqual(code, 2)
-        self.assertIn("3 行目", err)
+        self.assertIn("元ファイルの 7 行目", err)  # 見出し行・空行も数える
         self.assertNotIn("山本", err)
         self.assertFalse(self.out.exists())
 
@@ -161,8 +161,24 @@ class MeetingPreprocessTest(unittest.TestCase):
         self.assertIn("m_", text)
 
     def test_allow_words_can_clear_a_speaker_head_false_positive(self):
-        roster = {**self.roster, "allow": [*self.roster["allow"], "背景"]}
-        mp.anonymize_note(FRONT + "- 背景: 経緯\n", roster, self.words_list)
+        roster = {**self.roster, "allow": [*self.roster["allow"], "経緯"]}
+        mp.anonymize_note(FRONT + "- 経緯: 詳細\n", roster, self.words_list)
+
+    def test_speaker_head_with_space_or_role_parenthesis_stops(self):
+        for line in ("- 田中 太郎: 来週確認します", "- 山田 (PM): 対応する", "- 山田（PM）: 対応する", "- Taro Tanaka (PM): ok"):
+            with self.assertRaises(sa.AnonymizeError, msg=line):
+                self.anonymize(line + "\n")
+
+    def test_common_labels_are_not_speaker_heads(self):
+        labels = ("担当", "期限", "参加者", "日時", "背景", "目的", "議事", "概要", "対応", "理由", "進捗",
+                  "Owner", "Due", "Status", "Action", "Decision", "Agenda", "Date", "Attendees")
+        _, _, count = self.anonymize("".join(f"- {label}: 内容\n" for label in labels))
+        self.assertEqual(count, len(labels))
+
+    def test_line_numbers_count_original_file_lines(self):
+        with self.assertRaises(sa.AnonymizeError) as ctx:
+            self.anonymize("\n## 決定\n\n- 山本: 対応\n")
+        self.assertIn("元ファイルの 8 行目", str(ctx.exception))
 
     def test_held_on_must_be_a_real_ascii_date(self):
         for bad in ("2026-13-45", "2026-02-30", "２０２６-１０-０５", "2026-1-5"):

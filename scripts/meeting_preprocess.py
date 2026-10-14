@@ -25,11 +25,18 @@ MEETING_KEYS = ("meeting_alias", "held_on")
 ALIAS_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 # 会議メモ特有の行頭「名前: 発言」。置換後にハンドル・既知ラベル以外が残れば名簿外の人名の疑いとして数える
-SPEAKER_HEAD_RE = re.compile(r"^\s*(?:[-*・]\s*|\d+[.)]\s*)?(?P<head>[^\s:：、。]{1,12}|[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*){0,2})\s*[:：]\s*\S")
-SPEAKER_HEAD_NAME_RE = re.compile(r"[一-鿿ぁ-ゟァ-ヿー]{1,8}|[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*){0,2}")
+SPEAKER_HEAD_RE = re.compile(r"^\s*(?:[-*・]\s*|\d+[.)]\s*)?(?P<head>[^:：、。]{1,24}?)\s*[:：]\s*\S")
+PAREN_RE = re.compile(r"\s*[（(][^()（）]*[)）]")  # 「山田 (PM)」の役割括弧は外して名前だけ見る
+CJK_WORD = r"[一-鿿ぁ-ゟァ-ヿー]{1,8}"
+LATIN_WORD = r"[A-Za-z][A-Za-z.'-]*"
+SPEAKER_HEAD_NAME_RE = re.compile(rf"{CJK_WORD}(?: {CJK_WORD})?|{LATIN_WORD}(?: {LATIN_WORD}){{0,2}}")
 LABEL_WORDS = frozenset(w.casefold() for w in (
     "決定", "アクション", "未決", "議題", "備考", "注意", "結論", "課題", "確認", "宿題", "次回", "共有", "報告", "質問",
-    "todo", "action", "decision", "note", "memo", "agenda", "next", "http", "https"))
+    "担当", "期限", "参加者", "出席", "欠席", "日時", "日付", "時間", "場所", "背景", "目的", "目標", "議事", "概要", "対応",
+    "理由", "進捗", "状況", "内容", "資料", "リスク", "懸念", "補足", "要約", "まとめ", "次のアクション", "決定事項", "確認事項",
+    "owner", "due", "status", "date", "time", "location", "attendees", "absent", "summary", "background", "purpose",
+    "goal", "issue", "risk", "result", "progress", "reason", "decisions", "actions", "agenda", "decision", "action",
+    "todo", "note", "notes", "memo", "next", "http", "https"))
 EXISTS_MESSAGE = "同名の匿名化済みファイルが既にあります。上書きしないので、別名にするか既存を EM が退避してから再実行してください"
 LINE_SOFT_LIMIT = 200  # 28 §2: これを超えるメモは分割を促す
 
@@ -52,7 +59,7 @@ def speaker_head_suspects(line, roster):
     match = SPEAKER_HEAD_RE.match(line)
     if not match:
         return 0
-    head = match.group("head").strip()
+    head = PAREN_RE.sub("", match.group("head")).strip()
     if not SPEAKER_HEAD_NAME_RE.fullmatch(head) or sa.HANDLE_RE.match(head):
         return 0
     known = {w.casefold() for w in roster["allow"]} | LABEL_WORDS
@@ -83,11 +90,12 @@ def anonymize_note(raw, roster, words):
     meta, body = sp.split_front_matter(text, MEETING_KEYS)
     meta = check_meta(meta)
     lines = [sa.mask(line, roster).rstrip() for line in body.splitlines()]
-    flagged = [(n, sa.count_suspects(line, roster) + speaker_head_suspects(line, roster))
-               for n, line in enumerate((l for l in lines if l.strip()), start=1)]
+    offset = text[:len(text) - len(body)].count("\n")  # front matter の行数。報告は元ファイルの行番号にする
+    flagged = [(offset + n, sa.count_suspects(line, roster) + speaker_head_suspects(line, roster))
+               for n, line in enumerate(lines, start=1) if line.strip()]
     flagged = [(n, hits) for n, hits in flagged if hits]
     if flagged:
-        rows = ", ".join(f"{n} 行目" for n, _ in flagged)
+        rows = ", ".join(f"元ファイルの {n} 行目" for n, _ in flagged)
         _fail(f"名簿外の人名の疑いが {sum(h for _, h in flagged)} 件残っています（{rows}）。"
               "名簿に追加するか、普通の語なら allow_words に足してから再実行してください。何も書いていません")
     front = "\n".join(f"{k}: {meta[k]}" for k in MEETING_KEYS)
