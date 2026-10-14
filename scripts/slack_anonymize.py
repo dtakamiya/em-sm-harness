@@ -5,7 +5,8 @@
 - 名簿外の人名らしきものが残ったら**何も書かず停止**する（件数とメッセージ ID だけ報告。語は出さない）。
 - 鍵（環境変数 EM_HARNESS_ANON_KEY）・名簿が無い／不正なら止める（fail-closed）。
 - anon を読む側は load_anon() だけを使う。anon/ 直下の匿名化済みマーカー付きファイル以外（raw 相当の parsed/ 等）は読まない。
-- 14 日を過ぎた anon は load_anon() が拒否する（削除は未実装。13 §8）。
+- 14 日（暫定。Q-016 で確定）を過ぎた anon は load_anon() が拒否する（削除は未実装。13 §8）。
+- 入力の text_sha256（実名入り入力のハッシュ）は出力に持ち込まない。出力にあるのは匿名化後メッセージのハッシュ（anon_sha256）だけ。
 """
 import argparse
 import hashlib
@@ -148,8 +149,9 @@ def anonymize(parsed, roster):
         raise AnonymizeError(f"名簿外の人名の疑いが {total} 件残っています（メッセージ {ids}）。"
                              "名簿に追加するか、普通の語なら allow_words に足してから再実行してください。何も書いていません")
     meta = {k: mask(str(v), roster) for k, v in parsed.get("meta", {}).items()}
+    anon_sha256 = hashlib.sha256(json.dumps(messages, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     return {"schema_version": 1, "kind": ANON_KIND, "anonymized": True,
-            "source": {"file": parsed["source"]["file"], "text_sha256": parsed.get("text_sha256")},
+            "source": {"file": parsed["source"]["file"], "anon_sha256": anon_sha256},
             "meta": meta, "messages": messages, "unmasked_suspects": 0, "notes": list(parsed.get("notes", []))}
 
 

@@ -84,6 +84,17 @@ class SlackAnonymizeTest(unittest.TestCase):
         out = self.anonymize(message("m-001", "Alice", "確認Bob Sampleさん"))
         self.assertNotIn("Bob", out["messages"][0]["text"])
 
+    def test_output_carries_no_hash_of_the_real_input(self):
+        parsed = parsed_of(message("m-001", "Alice Example", "Bob Sampleさんへ"))
+        out = sa.anonymize(parsed, self.roster)
+        self.assertNotIn("text_sha256", out["source"])
+        self.assertNotIn("abc", json.dumps(out))  # 入力側の text_sha256 の値
+        self.assertNotIn("msg_sha256", json.dumps(out))
+        same = sa.anonymize(parsed, self.roster)
+        self.assertEqual(out["source"]["anon_sha256"], same["source"]["anon_sha256"])
+        changed = sa.anonymize(parsed_of(message("m-001", "Alice Example", "別の本文")), self.roster)
+        self.assertNotEqual(out["source"]["anon_sha256"], changed["source"]["anon_sha256"])
+
     def test_refuses_skipped_input(self):
         with self.assertRaises(sa.AnonymizeError):
             sa.anonymize(parsed_of(skipped="sensitive"), self.roster)
