@@ -24,19 +24,20 @@ ALLOWED_OUT_ROOT = DEFAULT_OUT_DIR  # 出力はここ（gitignore 済みの data
 MEETING_KEYS = ("meeting_alias", "held_on")
 ALIAS_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
-# 会議メモ特有の行頭「名前: 発言」。置換後にハンドル・既知ラベル以外が残れば名簿外の人名の疑いとして数える
+# 会議メモ特有の行頭「名前: 発言」。fail-closed: 置換後に既知語（ハンドル・ラベル・allow_words・チケットキー・文字を含まない時刻等）
+# 以外の行頭「X:」が残れば、形（全角空白・3 語以上・アクセント・カンマ・数字混じり）を問わず名簿外の人名の疑いとして数える
 SPEAKER_HEAD_RE = re.compile(r"^\s*(?:[-*・]\s*|\d+[.)]\s*)?(?P<head>[^:：、。]{1,24}?)\s*[:：]\s*\S")
 PAREN_RE = re.compile(r"\s*[（(][^()（）]*[)）]")  # 「山田 (PM)」の役割括弧は外して名前だけ見る
-CJK_WORD = r"[一-鿿ぁ-ゟァ-ヿー]{1,8}"
-LATIN_WORD = r"[A-Za-z][A-Za-z.'-]*"
-SPEAKER_HEAD_NAME_RE = re.compile(rf"{CJK_WORD}(?: {CJK_WORD})?|{LATIN_WORD}(?: {LATIN_WORD}){{0,2}}")
+TICKET_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")  # EX-102 のような Jira キー。人名ではない
 LABEL_WORDS = frozenset(w.casefold() for w in (
     "決定", "アクション", "未決", "議題", "備考", "注意", "結論", "課題", "確認", "宿題", "次回", "共有", "報告", "質問",
     "担当", "期限", "参加者", "出席", "欠席", "日時", "日付", "時間", "場所", "背景", "目的", "目標", "議事", "概要", "対応",
     "理由", "進捗", "状況", "内容", "資料", "リスク", "懸念", "補足", "要約", "まとめ", "次のアクション", "決定事項", "確認事項",
     "owner", "due", "status", "date", "time", "location", "attendees", "absent", "summary", "background", "purpose",
     "goal", "issue", "risk", "result", "progress", "reason", "decisions", "actions", "agenda", "decision", "action",
-    "todo", "note", "notes", "memo", "next", "http", "https"))
+    "todo", "note", "notes", "memo", "next",
+    "http", "https"))  # URL は mask() で [URL] に置換済みだが、「https: …」と書かれた裸の語は人名ではないので誤検知から外す
+LABEL_WORDS = LABEL_WORDS | {"[url]"}
 EXISTS_MESSAGE = "同名の匿名化済みファイルが既にあります。上書きしないので、別名にするか既存を EM が退避してから再実行してください"
 LINE_SOFT_LIMIT = 200  # 28 §2: これを超えるメモは分割を促す
 
@@ -55,13 +56,13 @@ def check_out_dir(out_dir, allowed_root=None):
 
 
 def speaker_head_suspects(line, roster):
-    """行頭「名前: 発言」の名前が、ハンドル・既知ラベル・allow_words のどれでもなければ 1（敬称なしの人名を拾う）。"""
+    """行頭「名前: 発言」の名前が、ハンドル・既知ラベル・allow_words のどれでもなければ 1（敬称なしの人名を拾う。fail-closed）。"""
     match = SPEAKER_HEAD_RE.match(line)
     if not match:
         return 0
     head = PAREN_RE.sub("", match.group("head")).strip()
-    if not SPEAKER_HEAD_NAME_RE.fullmatch(head) or sa.HANDLE_RE.match(head):
-        return 0
+    if not head or not re.search(r"[^\W\d_]", head) or sa.HANDLE_RE.match(head) or TICKET_KEY_RE.fullmatch(head):
+        return 0  # 空・文字を含まない（10:00 など）・ハンドル・チケットキーは人名ではない
     known = {w.casefold() for w in roster["allow"]} | LABEL_WORDS
     return 0 if head.casefold() in known else 1
 

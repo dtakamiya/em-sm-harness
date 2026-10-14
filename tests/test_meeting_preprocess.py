@@ -169,6 +169,16 @@ class MeetingPreprocessTest(unittest.TestCase):
             with self.assertRaises(sa.AnonymizeError, msg=line):
                 self.anonymize(line + "\n")
 
+    def test_any_unknown_head_stops_even_in_unusual_shapes(self):
+        for line in ("- 山田　太郎: 確認", "- 山田 太郎 次郎: 確認", "- José García: ok", "- Smith, John: ok",
+                     "- 田中Taro: ok", "- Alice2: ok", "- 佐藤: ok"):
+            with self.assertRaises(sa.AnonymizeError, msg=line):
+                self.anonymize(line + "\n")
+
+    def test_non_name_heads_pass(self):
+        _, _, count = self.anonymize("- https: 参照\n- 10:00 開始\n- 2026-10-09: 期限\n- EX-102: 保留\n- [URL]: 参照\n")
+        self.assertEqual(count, 5)
+
     def test_common_labels_are_not_speaker_heads(self):
         labels = ("担当", "期限", "参加者", "日時", "背景", "目的", "議事", "概要", "対応", "理由", "進捗",
                   "Owner", "Due", "Status", "Action", "Decision", "Agenda", "Date", "Attendees")
