@@ -124,8 +124,28 @@ class SlackAnonymizeTest(unittest.TestCase):
         out = sa.run(parsed, TEMPLATE, self.anon, KEY, False)
         written = next(self.anon.glob("*.json"))
         self.assertNotIn(input_suffix, written.name)
+        self.assertNotIn("ex-team", written.name)
         self.assertTrue(written.name.endswith(f"-{out['source']['anon_sha256'][:8]}.json"))
         self.assertNotIn("text_sha256", written.read_text(encoding="utf-8"))
+
+    def test_real_name_in_input_filename_never_reaches_output_name_or_errors(self):
+        path = self.dir / "2026-10-05-Alice-Example-notes-01-deadbeef.json"
+        data = parsed_of(message("m-001", "Alice", "ok"))
+        data["source"]["file"] = "2026-10-05-alice-example-notes.md"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        sa.run(path, TEMPLATE, self.anon, KEY, False)
+        names = [f.name for f in self.anon.glob("*")]
+        self.assertEqual(len(names), 1)
+        self.assertRegex(names[0], r"^slack-anon-2026-10-05-[0-9a-f]{8}\.json$")
+        with self.assertRaises(sa.AnonymizeError) as dup:
+            sa.run(path, TEMPLATE, self.anon, KEY, False)
+        broken = self.dir / "Bob-Sample-broken.json"
+        broken.write_text("not json", encoding="utf-8")
+        with self.assertRaises(sa.AnonymizeError) as bad:
+            sa.run(broken, TEMPLATE, self.anon, KEY, False)
+        for exc in (dup.exception, bad.exception):
+            for leaked in ("Alice", "alice", "Bob", "Sample", "Example"):
+                self.assertNotIn(leaked, str(exc))
 
     def test_output_is_private_and_leaves_no_temp_file(self):
         path = self.dir / "p.json"

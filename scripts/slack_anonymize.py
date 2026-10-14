@@ -31,6 +31,7 @@ ANON_KIND = "slack_anon"
 ASCII_WORD = "A-Za-z0-9_À-ÖØ-öø-ÿ"  # アクセント付き Latin も語文字として扱う
 MIN_KEY_LEN = 16
 NAME_TOKEN = "(?:[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+|[A-ZÀ-ÖØ-Þ]{2,})"  # Capitalized / 全大文字
+DATE_PREFIX_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?![0-9])")
 HANDLE_RE = re.compile(r"^(?:em|m_[0-9a-f]{6})$")
 URL_RE = re.compile(r"https?://\S+")
 # 名簿外の人名らしきもの（語は報告しない）。\b は CJK を語文字扱いするので ASCII の lookaround を使う
@@ -188,26 +189,27 @@ def run(parsed_path, roster_path, anon_dir, key, dry_run):
     try:
         parsed = json.loads(Path(parsed_path).read_text(encoding="utf-8"))
     except (OSError, ValueError, UnicodeDecodeError):
-        raise AnonymizeError(f"前処理済みファイルを読めません: {parsed_path}")
+        raise AnonymizeError("前処理済みファイルを読めません（パスは入力名に実名を含み得るため表示しません）")
     if not isinstance(parsed, dict) or "messages" not in parsed or "source" not in parsed:
         raise AnonymizeError("前処理済み（slack_preprocess の出力）ではありません")
     out = anonymize(parsed, roster)
-    target = Path(anon_dir) / output_name(parsed_path, out["source"]["anon_sha256"])
+    target = Path(anon_dir) / output_name(out["source"]["file"], out["source"]["anon_sha256"])
     if not dry_run:
         write_new_private(target, json.dumps(out, ensure_ascii=False, indent=1) + "\n")
     return out
 
 
-def output_name(parsed_path, anon_sha256):
-    """前処理の出力名は元入力のハッシュ由来の接尾辞を持つ。外して匿名化後のハッシュに付け替える。"""
-    stem = re.sub(r"-[0-9a-f]{8}$", "", Path(parsed_path).stem)
-    return f"{stem}-{anon_sha256[:8]}.json"
+def output_name(masked_source_file, anon_sha256):
+    """出力名は入力ファイル名から作らない（実名が残り得る）。許すのは先頭の日付だけ + 匿名化後ハッシュ。"""
+    date = DATE_PREFIX_RE.match(masked_source_file)
+    prefix = f"{date.group(1)}-" if date else ""
+    return f"slack-anon-{prefix}{anon_sha256[:8]}.json"
 
 
 def write_new_private(target, body):
     """既存を上書きせず（O_EXCL）、自分だけ読める 0600 で作る。"""
     if target.exists():
-        raise AnonymizeError(f"出力先が既にあります。上書きしません: {target.name}")
+        raise AnonymizeError("出力先が既にあります。上書きしません（同じ内容を匿名化済み）")
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -216,7 +218,7 @@ def write_new_private(target, body):
             f.write(body)
         os.link(tmp, target)  # 既にあれば失敗（上書きしない）
     except FileExistsError:
-        raise AnonymizeError(f"出力先が既にあります。上書きしません: {target.name}")
+        raise AnonymizeError("出力先が既にあります。上書きしません（同じ内容を匿名化済み）")
     finally:
         tmp.unlink(missing_ok=True)
 
