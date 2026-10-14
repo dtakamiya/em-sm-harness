@@ -12,6 +12,7 @@ import argparse
 import os
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 import slack_anonymize as sa
@@ -19,14 +20,43 @@ import slack_preprocess as sp
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT_DIR = ROOT / "data" / "inbox" / "meeting"
+ALLOWED_OUT_ROOT = DEFAULT_OUT_DIR  # 出力はここ（gitignore 済みの data/ 配下）の中だけ。テストは差し替える
 MEETING_KEYS = ("meeting_alias", "held_on")
 ALIAS_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
-DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
+# 会議メモ特有の行頭「名前: 発言」。置換後にハンドル・既知ラベル以外が残れば名簿外の人名の疑いとして数える
+SPEAKER_HEAD_RE = re.compile(r"^\s*(?:[-*・]\s*|\d+[.)]\s*)?(?P<head>[^\s:：、。]{1,12}|[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*){0,2})\s*[:：]\s*\S")
+SPEAKER_HEAD_NAME_RE = re.compile(r"[一-鿿ぁ-ゟァ-ヿー]{1,8}|[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*){0,2}")
+LABEL_WORDS = frozenset(w.casefold() for w in (
+    "決定", "アクション", "未決", "議題", "備考", "注意", "結論", "課題", "確認", "宿題", "次回", "共有", "報告", "質問",
+    "todo", "action", "decision", "note", "memo", "agenda", "next", "http", "https"))
+EXISTS_MESSAGE = "同名の匿名化済みファイルが既にあります。上書きしないので、別名にするか既存を EM が退避してから再実行してください"
 LINE_SOFT_LIMIT = 200  # 28 §2: これを超えるメモは分割を促す
 
 
 def _fail(message):
     raise sa.AnonymizeError(message)
+
+
+def check_out_dir(out_dir, allowed_root=None):
+    """出力先は ALLOWED_OUT_ROOT（data/ 配下）の中に限る。.. やシンボリックリンクも解決して判定する。"""
+    allowed = Path(allowed_root or ALLOWED_OUT_ROOT).resolve()
+    resolved = Path(out_dir).resolve()
+    if resolved != allowed and allowed not in resolved.parents:
+        _fail("出力先は data/inbox/meeting/ 配下に限ります（実データを repo の追跡対象に置かないため）")
+    return resolved
+
+
+def speaker_head_suspects(line, roster):
+    """行頭「名前: 発言」の名前が、ハンドル・既知ラベル・allow_words のどれでもなければ 1（敬称なしの人名を拾う）。"""
+    match = SPEAKER_HEAD_RE.match(line)
+    if not match:
+        return 0
+    head = match.group("head").strip()
+    if not SPEAKER_HEAD_NAME_RE.fullmatch(head) or sa.HANDLE_RE.match(head):
+        return 0
+    known = {w.casefold() for w in roster["allow"]} | LABEL_WORDS
+    return 0 if head.casefold() in known else 1
 
 
 def check_meta(meta):
@@ -36,20 +66,24 @@ def check_meta(meta):
         _fail(f"front matter に {', '.join(missing)} が必要です（28 §2。例: meeting_alias: ex-planning）")
     if not ALIAS_RE.fullmatch(meta["meeting_alias"]):
         _fail("meeting_alias は英小文字・数字・ハイフンの別名にしてください（実会議名はファイル名に出しません）")
-    if not DATE_RE.fullmatch(meta["held_on"]):
-        _fail("held_on は YYYY-MM-DD にしてください")
+    try:
+        if not DATE_RE.fullmatch(meta["held_on"]):
+            raise ValueError
+        date.fromisoformat(meta["held_on"])
+    except ValueError:
+        _fail("held_on は実在する日付を YYYY-MM-DD で書いてください")
     return {k: meta[k] for k in MEETING_KEYS}
 
 
 def anonymize_note(raw, roster, words):
-    """純粋関数。(匿名化済み本文, 本文の空でない行数) を返す。機微語・名簿外の人名は例外。"""
+    """純粋関数。(匿名化済み本文, 検証済み front matter, 本文の空でない行数) を返す。機微語・名簿外の人名は例外。"""
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     if sp.is_sensitive(text, words):
         _fail("人事系の可能性があるので秘書は読みません（何も書いていません）")
     meta, body = sp.split_front_matter(text, MEETING_KEYS)
     meta = check_meta(meta)
     lines = [sa.mask(line, roster).rstrip() for line in body.splitlines()]
-    flagged = [(n, sa.count_suspects(line, roster))
+    flagged = [(n, sa.count_suspects(line, roster) + speaker_head_suspects(line, roster))
                for n, line in enumerate((l for l in lines if l.strip()), start=1)]
     flagged = [(n, hits) for n, hits in flagged if hits]
     if flagged:
@@ -61,15 +95,26 @@ def anonymize_note(raw, roster, words):
     return f"---\n{front}\n---\n" + "\n".join(lines).strip("\n") + "\n", meta, count
 
 
+def _read_paste(path):
+    """読めないときの理由にパスを含めない（ファイル名に実名が入り得る）。"""
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        _fail("貼り付けファイルを読めません（存在・UTF-8・ディレクトリでないことを確認してください。パスは表示しません）")
+
+
 def run(paste_path, roster_path, words_file, out_dir, key, dry_run):
+    out_dir = check_out_dir(out_dir)
     roster = sa.load_roster(roster_path, key)
     try:
         words = sp.load_sensitive_words(words_file)
-        raw = sp._read_text(paste_path, "貼り付けファイル")
     except sp.PreprocessError as exc:
         _fail(str(exc))
+    raw = _read_paste(paste_path)
     text, meta, count = anonymize_note(raw, roster, words)
     target = Path(out_dir) / f"{meta['held_on']}-{meta['meeting_alias']}.md"
+    if target.exists():
+        _fail(EXISTS_MESSAGE)
     if not dry_run:
         sa.write_new_private(target, text)
     return {"file": target.name, "line_count": count, "over_limit": count > LINE_SOFT_LIMIT}

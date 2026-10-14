@@ -27,6 +27,9 @@ class MeetingPreprocessTest(unittest.TestCase):
         self.words = self.dir / "words.txt"
         self.words.write_text("# 架空\n査定\n懲戒\n", encoding="utf-8")
         self.out = self.dir / "meeting"
+        original = mp.ALLOWED_OUT_ROOT
+        mp.ALLOWED_OUT_ROOT = self.dir  # 実 data/ には書かない
+        self.addCleanup(setattr, mp, "ALLOWED_OUT_ROOT", original)
         self.roster = sa.load_roster(TEMPLATE, KEY)
         self.words_list = sp.load_sensitive_words(self.words)
 
@@ -62,7 +65,7 @@ class MeetingPreprocessTest(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         code, _, err = self.run_main()
         self.assertEqual(code, 2)
-        self.assertIn("上書きしません", err)
+        self.assertIn("同名の匿名化済みファイルが既にあります", err)
 
     def test_reuses_slack_parts_instead_of_reimplementing(self):
         self.assertIs(mp.sa.mask, sa.mask)
@@ -116,6 +119,68 @@ class MeetingPreprocessTest(unittest.TestCase):
         paste.write_text(FRONT + "".join(f"- 項目 {i}\n" for i in range(mp.LINE_SOFT_LIMIT + 1)), encoding="utf-8")
         _, stdout, _ = self.run_main(paste, "--dry-run")
         self.assertIn("分割", stdout)
+
+    def test_out_dir_outside_data_is_rejected(self):
+        mp.ALLOWED_OUT_ROOT = self.dir / "allowed"
+        for bad in (self.dir / "elsewhere", self.dir / "allowed" / ".." / "x"):
+            code, _, err = self.run_main(RAW, "--out-dir", str(bad))
+            self.assertEqual(code, 2, bad)
+            self.assertIn("配下に限ります", err)
+            self.assertFalse((self.dir / "elsewhere").exists())
+
+    def test_out_dir_symlink_escape_is_rejected(self):
+        (self.dir / "allowed").mkdir()
+        (self.dir / "outside").mkdir()
+        (self.dir / "allowed" / "link").symlink_to(self.dir / "outside")
+        mp.ALLOWED_OUT_ROOT = self.dir / "allowed"
+        code, _, _ = self.run_main(RAW, "--out-dir", str(self.dir / "allowed" / "link"))
+        self.assertEqual(code, 2)
+        self.assertEqual(list((self.dir / "outside").iterdir()), [])
+
+    def test_default_out_dir_is_under_gitignored_data(self):
+        self.assertEqual(mp.DEFAULT_OUT_DIR, ROOT / "data" / "inbox" / "meeting")
+        self.assertIn("data/", (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines())
+
+    def test_unknown_speaker_head_without_honorific_stops(self):
+        for line in ("- 田中: 来週までに確認します", "- Tanaka: I will check", "鈴木太郎：やります", "tanaka taro: ok"):
+            with self.assertRaises(sa.AnonymizeError, msg=line):
+                self.anonymize(line + "\n")
+
+    def test_speaker_head_reports_line_number_only(self):
+        paste = self.dir / "head.md"
+        paste.write_text(FRONT + "## 決定\n- ok\n- 山本: 対応する\n", encoding="utf-8")
+        code, _, err = self.run_main(paste)
+        self.assertEqual(code, 2)
+        self.assertIn("3 行目", err)
+        self.assertNotIn("山本", err)
+        self.assertFalse(self.out.exists())
+
+    def test_known_labels_handles_and_ticket_keys_are_not_speaker_heads(self):
+        text, _, count = self.anonymize("- 決定: EX-102 は回す\n- アクション: 手順書\n- em: 共有する\n- EX-102: 保留\n- Alice: 確認\n- 10:00 開始\n")
+        self.assertEqual(count, 6)
+        self.assertIn("m_", text)
+
+    def test_allow_words_can_clear_a_speaker_head_false_positive(self):
+        roster = {**self.roster, "allow": [*self.roster["allow"], "背景"]}
+        mp.anonymize_note(FRONT + "- 背景: 経緯\n", roster, self.words_list)
+
+    def test_held_on_must_be_a_real_ascii_date(self):
+        for bad in ("2026-13-45", "2026-02-30", "２０２６-１０-０５", "2026-1-5"):
+            with self.assertRaises(sa.AnonymizeError, msg=bad):
+                mp.anonymize_note(f"---\nmeeting_alias: ex-planning\nheld_on: {bad}\n---\n- x\n", self.roster, self.words_list)
+
+    def test_dry_run_reports_existing_target_and_message_is_clear(self):
+        self.run_main()
+        code, _, err = self.run_main(RAW, "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("同名の匿名化済みファイルが既にあります", err)
+
+    def test_unreadable_paste_error_does_not_echo_path(self):
+        missing = self.dir / "secret-name-田中.md"
+        code, _, err = self.run_main(missing)
+        self.assertEqual(code, 2)
+        self.assertNotIn("田中", err)
+        self.assertNotIn(str(self.dir), err)
 
     def test_slack_preprocess_front_matter_keys_are_unchanged(self):
         meta, _ = sp.split_front_matter("---\nchannel_alias: ex-team\nheld_on: 2026-10-05\n---\nx\n")

@@ -8,7 +8,8 @@ description: 匿名化・構造化済みの会議メモ（structured JSON）か�
 設計: `docs/design/28-meeting-notes-input.md` §6〜§7 / 下書きの型: `templates/drafts/meeting-minutes.md`
 
 ## 手順
-0. 貼られた生メモは先に `python3 scripts/meeting_preprocess.py <メモ>.md` で匿名化する（`data/inbox/meeting/<held_on>-<alias>.md` に出る。人事系の語・名簿外の人名があれば何も書かず止まる）。抽出は匿名化済みのファイルだけを読む
+0. 前提: 生メモは gitignore 済みの `data/` 配下に置く（コミットしない）。環境変数 `EM_HARNESS_ANON_KEY`（16 文字以上）と名簿 `config/local.roster.json`・機微語ファイルが要る。出力先は `data/inbox/meeting/` 配下のみ。終了コード 2 = 中止（機微語・名簿外の人名・鍵/名簿不正・同名の出力が既にある）で、何も書かれていない。同名の出力があると上書きしないので再実行できない（別名にするか既存を EM が退避する）
+0. 貼られた生メモは先に `python3 scripts/meeting_preprocess.py <メモ>.md` で匿名化する（`data/inbox/meeting/<held_on>-<alias>.md` に出る。人事系の語・名簿外の人名があれば何も書かず止まる）。抽出は匿名化済みのファイルだけを読む。匿名化後 → 構造化 JSON は現状手動（抽出器は未実装・28 §9-2）
 1. 構造化 JSON（`data/structured/meeting/<file>.json`、匿名化済みのみ）を用意する。形は 28 §3（実名・メモ原文は書かない）
 2. `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` で議事録下書きと追加予定の候補を見せる
 3. EM が問題なければ `--dry-run` を外して実行する（下書きは `data/outputs/drafts/<元名>-minutes.md`、候補は `data/tasks/candidates.json` に追記。直前の候補は `candidates.json.pre-meeting.bak` に退避）
