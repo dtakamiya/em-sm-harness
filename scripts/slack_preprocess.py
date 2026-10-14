@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,7 +23,9 @@ DEFAULT_OUT_DIR = ROOT / "data" / "inbox" / "slack" / "parsed"
 LEDGER_NAME = ".seen.json"
 MESSAGE_SOFT_LIMIT = 300  # 13 §4: これを超える貼り付けは分割を促す
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
-HEADER = re.compile(r"^(?P<speaker>\S.*?)\s{1,}(?P<time>\d{1,2}:\d{2}(?:\s?[AP]M)?)\s*$")
+# 発言者は短い名前だけ（文末記号を含む本文行の誤認を避ける）。区切りは 2 個以上の空白かタブ（13 §4 の例）
+SPEAKER_MAX = 40
+HEADER = re.compile(r"^(?P<speaker>[^\s。、，．！？!?;；「」『』()（）][^。、，．！？!?;；「」『』]*?)(?:\t|\s{2,})(?P<time>\d{1,2}:\d{2}(?:\s?[AP]M)?)\s*$")
 META_LINE = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>[^#]*?)\s*(?:#.*)?$")
 META_KEYS = ("channel_alias", "thread", "pasted_on")
 
@@ -35,20 +38,38 @@ def _sha256(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def load_sensitive_words(path):
+def _read_text(path, label):
+    """読めないときは理由だけ返す。不正バイト列の断片は出さない。"""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        return path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise PreprocessError(f"機微語ファイルがありません: {path}（判定できないので止めます）")
+        raise PreprocessError(f"{label}が見つかりません: {path}")
+    except UnicodeDecodeError:
+        raise PreprocessError(f"{label}が UTF-8 として読めません: {path}")
+    except IsADirectoryError:
+        raise PreprocessError(f"{label}にディレクトリが指定されています: {path}")
+    except OSError as exc:
+        raise PreprocessError(f"{label}を読めません（{type(exc).__name__}）: {path}")
+
+
+def _fold(text):
+    """機微語照合用の正規化。全角半角・大小・空白・制御・ゼロ幅文字の差で取りこぼさない。"""
+    folded = unicodedata.normalize("NFKC", text).casefold()
+    return "".join(c for c in folded if not c.isspace() and unicodedata.category(c) not in ("Cc", "Cf"))
+
+
+def load_sensitive_words(path):
+    lines = _read_text(path, "機微語ファイル").splitlines()
     words = [w.strip() for w in lines if w.strip() and not w.lstrip().startswith("#")]
+    words = [f for f in (_fold(w) for w in words) if f]
     if not words:
         raise PreprocessError(f"機微語ファイルが空です: {path}（判定できないので止めます）")
     return words
 
 
 def is_sensitive(text, words):
-    lowered = text.lower()
-    return any(w.lower() in lowered for w in words)
+    folded = _fold(text)
+    return any(w in folded for w in words)
 
 
 def split_front_matter(text):
@@ -69,7 +90,7 @@ def parse_messages(body):
     messages, unparsed, current = [], 0, None
     for line in body.splitlines():
         header = HEADER.match(line)
-        if header:
+        if header and len(header.group("speaker").strip()) <= SPEAKER_MAX:
             current = {"speaker": header.group("speaker").strip(), "time": header.group("time").strip(), "lines": []}
             messages.append(current)
         elif current is not None:
@@ -88,7 +109,7 @@ def _read_ledger(path):
     if not path.exists():
         return {"files": [], "messages": []}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(_read_text(path, "既出台帳"))
         if isinstance(data.get("files"), list) and isinstance(data.get("messages"), list):
             return data
     except (ValueError, AttributeError):
@@ -109,10 +130,7 @@ def _dump(data):
 
 def preprocess(paste_path, words, ledger):
     """純粋関数。(出力 dict, 更新後の台帳 or None) を返す。台帳が None のときは更新しない。"""
-    try:
-        raw = paste_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise PreprocessError(f"貼り付けファイルが見つかりません: {paste_path}")
+    raw = _read_text(paste_path, "貼り付けファイル").replace("\r\n", "\n").replace("\r", "\n")
     base = {"schema_version": 1, "source": {"file": paste_path.name}, "text_sha256": _sha256(raw),
             "skipped": None, "meta": {}, "messages": [], "duplicates_excluded": 0, "unparsed_lines": 0, "notes": []}
     if is_sensitive(raw, words):
@@ -145,12 +163,23 @@ def preprocess(paste_path, words, ledger):
     return out, new_ledger
 
 
+def output_path(out_dir, paste_path, text_sha256):
+    """出力名に内容ハッシュを付け、同名の別貼り付けや台帳（.seen.json）を上書きしない。"""
+    stem = paste_path.stem
+    if not stem or stem.startswith("."):
+        raise PreprocessError(f"貼り付けファイル名が不正です（空・先頭ドットは不可）: {paste_path.name}")
+    return out_dir / f"{stem}-{text_sha256[:8]}.json"
+
+
 def run(paste_path, words_file, out_dir, dry_run):
     words = load_sensitive_words(words_file)
     ledger_path = out_dir / LEDGER_NAME
     out, new_ledger = preprocess(paste_path, words, _read_ledger(ledger_path))
     if not dry_run and new_ledger is not None:
-        _atomic_write(out_dir / f"{paste_path.stem}.json", _dump(out))
+        target = output_path(out_dir, paste_path, out["text_sha256"])
+        if target.exists():
+            raise PreprocessError(f"出力先が既にあります。上書きしません: {target.name}")
+        _atomic_write(target, _dump(out))
         _atomic_write(ledger_path, _dump(new_ledger))
     return out
 
