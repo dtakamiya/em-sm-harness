@@ -4,8 +4,11 @@
 ローカルのみ・stdlib のみ・外部接続なし（カレンダーには接続しない。EM が貼ったテキストを読むだけ）。
 - 日付見出し行（10/12 (月)・10月12日(月)・2026-10-12・Mon, Oct 12 など）の下の「時刻 + 題名」行を会議として拾う。
   時刻は 10:00 / 10:00-11:00 / 10:00am / 終日 / All day。時刻と題名が同じ行で、日付見出しの直後に並ぶ形を想定。
-- 読めなかった行は捨てず、行番号つきで stderr に報告する（1 件でもあれば終了コード 1。変換結果は出す）。
-- prep_task_id は常に null（準備タスクの紐付けは EM が後で決める）。
+- 読めなかった行は捨てず、行番号つきで stderr に報告する。日付見出しらしいのに解釈できない行（2/30 など）の後は、
+  次の正しい見出しまでの会議も「読めなかった行」にする（前の日付に黙って付けない）。
+- 読めなかった行が 1 件でもあれば終了コード 1。--out には書かない（直して再実行できるように）。標準出力のときだけ変換結果を出す。
+- prep_task_id は常に null（準備タスクの紐付けは EM が後で決める）。id は連番で、貼り直すと変わり得る。
+- 年は見出しに無ければ --year（既定: 今年）。12 月→1 月の週は、1 月側の見出しに年を付ける（例: 2027-01-04）。
 - --out は既存ファイルを上書きしない。省略時は標準出力。
 """
 import argparse
@@ -25,9 +28,13 @@ HEADER_RES = (
     re.compile(rf"^(?:(?P<y>\d{{4}})年\s*)?(?P<m>\d{{1,2}})月\s*(?P<d>\d{{1,2}})日{WEEKDAY}$"),
     re.compile(r"^(?:[A-Za-z]+,?\s+)?(?P<mon>[A-Za-z]{3})[A-Za-z]*\.?\s+(?P<d>\d{1,2})(?:,?\s+(?P<y>\d{4}))?$"),
 )
-TIME = r"\d{1,2}:\d{2}(?:\s*[ap]m)?"
+TIME = r"\d{1,2}:\d{2}(?:\s*[ap]m(?![a-z]))?"
 EVENT_RE = re.compile(
     rf"^(?P<time>終日|all[- ]day|{TIME}(?:\s*[-–—~〜～]\s*{TIME})?)\s+(?P<title>\S.*)$", re.I)
+
+
+# 見出しらしい形（解釈できなくても、直後の会議を前の日付に付けないための目印）
+LOOSE_HEADER_RE = re.compile(r"^(?:\d{1,4}\s*[-/.年]\s*\d|\d{1,2}\s*月|[A-Za-z]{3,9}\.?\s+\d{1,2}\b)")
 
 
 def parse_header(line, default_year):
@@ -61,6 +68,8 @@ def convert(text, default_year):
             current = header
             continue
         event = EVENT_RE.match(line)
+        if not event and LOOSE_HEADER_RE.match(line):
+            current = None  # 見出しらしいが読めない。次の正しい見出しまで会議を付けない
         if event and current:
             found.append((current, event.group("title").strip()))
         else:
@@ -88,13 +97,16 @@ def main(argv=None):
     ap.add_argument("--out", help="書き出し先（省略時は標準出力）。既存ファイルは上書きしない")
     args = ap.parse_args(argv)
     try:
-        text = sys.stdin.read() if args.paste == "-" else Path(args.paste).read_text(encoding="utf-8")
+        text = sys.stdin.read() if args.paste == "-" else Path(args.paste).read_text(encoding="utf-8-sig")
+        text = text.lstrip("\ufeff")
     except (OSError, UnicodeDecodeError) as exc:
         print(f"貼り付けファイルを読めません: {exc.__class__.__name__}", file=sys.stderr)
         return 2
     meetings, unreadable = convert(text, args.year)
     payload = json.dumps(build_document(meetings), ensure_ascii=False, indent=1) + "\n"
-    if args.out:
+    if args.out and unreadable:
+        print("読めなかった行があるため --out には書いていません（直して再実行してください）", file=sys.stderr)
+    elif args.out:
         try:
             write_new(args.out, payload)
         except FileExistsError:
@@ -107,7 +119,7 @@ def main(argv=None):
     else:
         sys.stdout.write(payload)
     if unreadable:
-        print(f"読めなかった行 {len(unreadable)} 件（変換結果には入っていません。手で足すか貼り直してください）:", file=sys.stderr)
+        print(f"読めなかった行 {len(unreadable)} 件（変換結果には入っていません。直して貼り直してください）:", file=sys.stderr)
         for number, line in unreadable:
             print(f"  {number} 行目: {line}", file=sys.stderr)
         return 1

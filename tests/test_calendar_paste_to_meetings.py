@@ -52,6 +52,16 @@ class ConvertTest(unittest.TestCase):
         self.assertEqual([m["title"] for m in meetings], ["ok"])
         self.assertEqual(unreadable, [(1, "10:00 日付の前の会議"), (3, "何かのメモ"), (5, "2/30")])
 
+    def test_meetings_after_invalid_header_are_unreadable_not_attached_to_previous_date(self):
+        text = "10/12\n9:00 A\n2/30\n10:00 B\n12.10.2026\n11:00 C\n10/13\n9:00 D\n"
+        meetings, unreadable = cp.convert(text, 2026)
+        self.assertEqual([(m["start"], m["title"]) for m in meetings], [("2026-10-12", "A"), ("2026-10-13", "D")])
+        self.assertEqual([n for n, _ in unreadable], [3, 4, 5, 6])
+
+    def test_pm_suffix_not_confused_with_word(self):
+        meetings, unreadable = cp.convert("10/12\n10:00 pmo 定例\n", 2026)
+        self.assertEqual(meetings[0]["title"], "pmo 定例")
+
     def test_sorted_by_date_even_if_pasted_out_of_order(self):
         meetings, _ = cp.convert("10/14\n9:00 B\n10/12\n9:00 A\n", 2026)
         self.assertEqual([m["title"] for m in meetings], ["A", "B"])
@@ -94,6 +104,22 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("上書きしない", err)
         self.assertEqual(target.read_text(encoding="utf-8"), before)
+
+    def test_bom_is_ignored(self):
+        self.paste.write_bytes(b"\xef\xbb\xbf" + JP.encode("utf-8"))
+        code, out, _ = self.run_main(str(self.paste), "--year", "2026")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(json.loads(out)["meetings"]), 3)
+
+    def test_unreadable_lines_do_not_write_out_file(self):
+        self.paste.write_text(JP + "謎の行\n", encoding="utf-8")
+        target = self.dir / "meetings.json"
+        code, _, err = self.run_main(str(self.paste), "--year", "2026", "--out", str(target))
+        self.assertEqual(code, 1)
+        self.assertFalse(target.exists())
+        self.assertIn("7 行目: 謎の行", err)
+        self.paste.write_text(JP, encoding="utf-8")
+        self.assertEqual(self.run_main(str(self.paste), "--year", "2026", "--out", str(target))[0], 0)
 
     def test_unreadable_lines_exit_1_with_line_numbers_but_still_output(self):
         self.paste.write_text(JP + "謎の行\n", encoding="utf-8")
