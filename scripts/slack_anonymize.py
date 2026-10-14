@@ -28,12 +28,14 @@ HANDLE_DIGITS = 6
 MIN_NAME_LEN = 2
 RETENTION_DAYS = 14
 ANON_KIND = "slack_anon"
-ASCII_WORD = "A-Za-z0-9_"
+ASCII_WORD = "A-Za-z0-9_À-ÖØ-öø-ÿ"  # アクセント付き Latin も語文字として扱う
+MIN_KEY_LEN = 16
+NAME_TOKEN = "(?:[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+|[A-ZÀ-ÖØ-Þ]{2,})"  # Capitalized / 全大文字
 HANDLE_RE = re.compile(r"^(?:em|m_[0-9a-f]{6})$")
 URL_RE = re.compile(r"https?://\S+")
 # 名簿外の人名らしきもの（語は報告しない）。\b は CJK を語文字扱いするので ASCII の lookaround を使う
-LATIN_NAME_RE = re.compile(rf"(?<![{ASCII_WORD}])[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)+(?![{ASCII_WORD}])")
-LATIN_HONORIFIC_RE = re.compile(rf"(?<![{ASCII_WORD}])[A-Z][a-z]+(?:-san|-sama|-kun|-chan|さん|様|くん|君)")
+LATIN_NAME_RE = re.compile(rf"(?<![{ASCII_WORD}]){NAME_TOKEN}(?:[ \t]+{NAME_TOKEN})+(?![{ASCII_WORD}])")
+LATIN_HONORIFIC_RE = re.compile(rf"(?<![{ASCII_WORD}]){NAME_TOKEN}(?:-san|-sama|-kun|-chan|さん|様|くん|君)")
 CJK_HONORIFIC_RE = re.compile(r"[一-鿿ァ-ヿー]{1,8}(?:さん|様|くん|君|氏|先生)")
 MENTION_RE = re.compile(r"@([^\s@,，、。]+)")
 SAFE_MENTIONS = frozenset({"here", "channel", "everyone"})
@@ -62,6 +64,8 @@ def load_roster(path, key):
     """名簿を読み、{正規化名: ハンドル} と orgs / allow を返す。不正は理由だけ返す。"""
     if not key:
         raise AnonymizeError(f"環境変数 {KEY_ENV} が未設定です（鍵なしでは匿名化しません）")
+    if len(key) < MIN_KEY_LEN:
+        raise AnonymizeError(f"{KEY_ENV} が短すぎます（{MIN_KEY_LEN} 文字以上。推測されにくい値にしてください）")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -96,7 +100,7 @@ def load_roster(path, key):
 def _name_pattern(name):
     parts = [re.escape(p) for p in _normalize(name).split(" ")]
     body = r"[ \t]+".join(parts)
-    if re.fullmatch(rf"[{ASCII_WORD} ]+", _normalize(name)):
+    if re.fullmatch(rf"[{ASCII_WORD} ]+", _normalize(name)):  # 語文字だけの名前は前後の語境界を要求
         return rf"(?<![{ASCII_WORD}]){body}(?![{ASCII_WORD}])"
     return body
 
@@ -132,6 +136,13 @@ def _speaker_unmapped(masked_speaker):
     return not HANDLE_RE.match(masked_speaker.strip())
 
 
+def _stop_message(flagged):
+    ids = ", ".join(i for i, _ in flagged)
+    total = sum(n for _, n in flagged)
+    return (f"名簿外の人名の疑いが {total} 件残っています（{ids}）。"
+            "名簿に追加するか、普通の語なら allow_words に足してから再実行してください。何も書いていません")
+
+
 def anonymize(parsed, roster):
     """純粋関数。parsed（前処理出力）→ anon dict。名簿外の人名らしきものが残れば AnonymizeError。"""
     if parsed.get("skipped") is not None:
@@ -143,16 +154,17 @@ def anonymize(parsed, roster):
         if hits:
             flagged.append((message["id"], hits))
         messages.append({"id": message["id"], "speaker": speaker, "time": message["time"], "text": text})
-    if flagged:
-        ids = ", ".join(i for i, _ in flagged)
-        total = sum(n for _, n in flagged)
-        raise AnonymizeError(f"名簿外の人名の疑いが {total} 件残っています（メッセージ {ids}）。"
-                             "名簿に追加するか、普通の語なら allow_words に足してから再実行してください。何も書いていません")
     meta = {k: mask(str(v), roster) for k, v in parsed.get("meta", {}).items()}
+    source_file = mask(parsed["source"]["file"], roster)
+    notes = [mask(str(n), roster) for n in parsed.get("notes", [])]
+    extra = [("meta", " ".join(meta.values())), ("source", source_file), ("notes", " ".join(notes))]
+    flagged += [(label, count_suspects(text, roster)) for label, text in extra if count_suspects(text, roster)]
+    if flagged:
+        raise AnonymizeError(_stop_message(flagged))
     anon_sha256 = hashlib.sha256(json.dumps(messages, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     return {"schema_version": 1, "kind": ANON_KIND, "anonymized": True,
-            "source": {"file": parsed["source"]["file"], "anon_sha256": anon_sha256},
-            "meta": meta, "messages": messages, "unmasked_suspects": 0, "notes": list(parsed.get("notes", []))}
+            "source": {"file": source_file, "anon_sha256": anon_sha256},
+            "meta": meta, "messages": messages, "unmasked_suspects": 0, "notes": notes}
 
 
 def load_anon(path, anon_dir=DEFAULT_ANON_DIR, now=None):
@@ -180,15 +192,33 @@ def run(parsed_path, roster_path, anon_dir, key, dry_run):
     if not isinstance(parsed, dict) or "messages" not in parsed or "source" not in parsed:
         raise AnonymizeError("前処理済み（slack_preprocess の出力）ではありません")
     out = anonymize(parsed, roster)
+    target = Path(anon_dir) / output_name(parsed_path, out["source"]["anon_sha256"])
     if not dry_run:
-        target = Path(anon_dir) / Path(parsed_path).name
-        if target.exists():
-            raise AnonymizeError(f"出力先が既にあります。上書きしません: {target.name}")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_name(target.name + ".tmp")
-        tmp.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        os.replace(tmp, target)
+        write_new_private(target, json.dumps(out, ensure_ascii=False, indent=1) + "\n")
     return out
+
+
+def output_name(parsed_path, anon_sha256):
+    """前処理の出力名は元入力のハッシュ由来の接尾辞を持つ。外して匿名化後のハッシュに付け替える。"""
+    stem = re.sub(r"-[0-9a-f]{8}$", "", Path(parsed_path).stem)
+    return f"{stem}-{anon_sha256[:8]}.json"
+
+
+def write_new_private(target, body):
+    """既存を上書きせず（O_EXCL）、自分だけ読める 0600 で作る。"""
+    if target.exists():
+        raise AnonymizeError(f"出力先が既にあります。上書きしません: {target.name}")
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(body)
+        os.link(tmp, target)  # 既にあれば失敗（上書きしない）
+    except FileExistsError:
+        raise AnonymizeError(f"出力先が既にあります。上書きしません: {target.name}")
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def main(argv=None):
@@ -202,6 +232,9 @@ def main(argv=None):
         out = run(args.parsed, args.roster, args.anon_dir, os.environ.get(KEY_ENV, ""), args.dry_run)
     except AnonymizeError as exc:
         print(f"中止: {exc}", file=sys.stderr)
+        return 2
+    except Exception:  # 想定外でも例外文（名前を含み得る）は出さない
+        print("中止: 内部エラー（詳細は出しません。何も書いていない可能性が高いので出力先を確認してください）", file=sys.stderr)
         return 2
     print(f"匿名化 {len(out['messages'])} 件{'（dry-run: 書き込みなし）' if args.dry_run else ''}")
     return 0

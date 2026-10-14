@@ -50,7 +50,7 @@ class SlackAnonymizeTest(unittest.TestCase):
         self.assertEqual(again["messages"][0]["speaker"], alice)
 
     def test_handle_depends_on_key(self):
-        other = sa.load_roster(TEMPLATE, "another-key")
+        other = sa.load_roster(TEMPLATE, "another-key-long-enough")
         a = sa.anonymize(parsed_of(message("m-001", "Alice", "x")), self.roster)["messages"][0]["speaker"]
         b = sa.anonymize(parsed_of(message("m-001", "Alice", "x")), other)["messages"][0]["speaker"]
         self.assertNotEqual(a, b)
@@ -95,6 +95,61 @@ class SlackAnonymizeTest(unittest.TestCase):
         changed = sa.anonymize(parsed_of(message("m-001", "Alice Example", "別の本文")), self.roster)
         self.assertNotEqual(out["source"]["anon_sha256"], changed["source"]["anon_sha256"])
 
+    def test_stops_on_unknown_names_in_meta_source_and_notes(self):
+        base = parsed_of(message("m-001", "Alice", "ok"))
+        cases = {"meta": {**base, "meta": {"channel_alias": "Dave Fixture"}},
+                 "source": {**base, "source": {"file": "2026-10-05-Dave Fixture-01.md"}},
+                 "notes": {**base, "notes": ["田中さんの件"]}}
+        for label, data in cases.items():
+            with self.subTest(label=label), self.assertRaises(sa.AnonymizeError) as ctx:
+                sa.anonymize(data, self.roster)
+            self.assertIn(label, str(ctx.exception))
+            self.assertNotIn("Dave", str(ctx.exception))
+
+    def test_roster_names_in_meta_and_source_are_masked(self):
+        data = {**parsed_of(message("m-001", "Alice", "ok")), "meta": {"channel_alias": "Bob"},
+                "source": {"file": "alice-notes.md"}}
+        out = sa.anonymize(data, self.roster)
+        self.assertNotIn("Bob", json.dumps(out))
+        self.assertNotIn("alice", json.dumps(out).lower())
+
+    def test_detects_all_caps_and_accented_latin_names(self):
+        for body in ("DAVE FIXTURE が担当", "José Álvarez が担当", "Édouardさんへ"):
+            with self.subTest(body=body), self.assertRaises(sa.AnonymizeError):
+                self.anonymize(message("m-001", "Alice", body))
+
+    def test_output_filename_has_no_input_hash_suffix(self):
+        parsed = self.preprocess_fixture()
+        input_suffix = parsed.stem[-8:]
+        out = sa.run(parsed, TEMPLATE, self.anon, KEY, False)
+        written = next(self.anon.glob("*.json"))
+        self.assertNotIn(input_suffix, written.name)
+        self.assertTrue(written.name.endswith(f"-{out['source']['anon_sha256'][:8]}.json"))
+        self.assertNotIn("text_sha256", written.read_text(encoding="utf-8"))
+
+    def test_output_is_private_and_leaves_no_temp_file(self):
+        path = self.dir / "p.json"
+        path.write_text(json.dumps(parsed_of(message("m-001", "Alice", "ok"))), encoding="utf-8")
+        sa.run(path, TEMPLATE, self.anon, KEY, False)
+        files = list(self.anon.glob("*"))
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].stat().st_mode & 0o777, 0o600)
+
+    def test_unexpected_exception_prints_generic_message(self):
+        path = self.dir / "p.json"
+        path.write_text("{}", encoding="utf-8")
+        os.environ[sa.KEY_ENV] = KEY
+        self.addCleanup(os.environ.pop, sa.KEY_ENV, None)
+        original = sa.run
+        sa.run = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("Dave Fixture"))
+        self.addCleanup(setattr, sa, "run", original)
+        err = io.StringIO()
+        with redirect_stderr(err), redirect_stdout(io.StringIO()):
+            code = sa.main([str(path), "--roster", str(TEMPLATE)])
+        self.assertEqual(code, 2)
+        self.assertIn("内部エラー", err.getvalue())
+        self.assertNotIn("Dave", err.getvalue())
+
     def test_refuses_skipped_input(self):
         with self.assertRaises(sa.AnonymizeError):
             sa.anonymize(parsed_of(skipped="sensitive"), self.roster)
@@ -102,6 +157,8 @@ class SlackAnonymizeTest(unittest.TestCase):
     def test_roster_validation_fail_closed(self):
         with self.assertRaises(sa.AnonymizeError):
             sa.load_roster(TEMPLATE, "")
+        with self.assertRaises(sa.AnonymizeError):
+            sa.load_roster(TEMPLATE, "short")  # 最小長未満
         with self.assertRaises(sa.AnonymizeError):
             sa.load_roster(self.dir / "missing.json", KEY)
         bad = {"em": {"names": ["EM"]}, "people": [{"names": ["Al"]}, {"names": ["x"]}]}
@@ -121,11 +178,12 @@ class SlackAnonymizeTest(unittest.TestCase):
     def test_end_to_end_writes_anon_without_any_roster_name_or_hash(self):
         parsed = self.preprocess_fixture()
         sa.run(parsed, TEMPLATE, self.anon, KEY, False)
-        written = (self.anon / parsed.name).read_text(encoding="utf-8")
+        anon_file = next(self.anon.glob("*.json"))
+        written = anon_file.read_text(encoding="utf-8")
         for name in REAL_NAMES:
             self.assertNotIn(name, written)
         self.assertNotIn("msg_sha256", written)
-        self.assertEqual(sa.load_anon(self.anon / parsed.name, self.anon)["kind"], "slack_anon")
+        self.assertEqual(sa.load_anon(anon_file, self.anon)["kind"], "slack_anon")
 
     def test_nothing_is_written_when_stopped_or_dry_run(self):
         path = self.dir / "p.json"
@@ -162,7 +220,7 @@ class SlackAnonymizeTest(unittest.TestCase):
         path = self.dir / "p.json"
         path.write_text(json.dumps(parsed_of(message("m-001", "Alice", "ok"))), encoding="utf-8")
         sa.run(path, TEMPLATE, self.anon, KEY, False)
-        target = self.anon / "p.json"
+        target = next(self.anon.glob("*.json"))
         mtime = target.stat().st_mtime
         sa.load_anon(target, self.anon, now=mtime + (sa.RETENTION_DAYS - 1) * 86400)
         with self.assertRaises(sa.AnonymizeError):
