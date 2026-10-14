@@ -398,8 +398,12 @@ def _write_error(path, exc):
 
 def _atomic_write_bytes(path, content):
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(content)
-    os.replace(tmp, path)
+    try:
+        tmp.write_bytes(content)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)  # 失敗時に .tmp を残さない
+        raise
 
 
 def save_state(path, state):
