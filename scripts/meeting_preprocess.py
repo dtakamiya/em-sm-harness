@@ -26,7 +26,7 @@ ALIAS_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 # 会議メモ特有の行頭「名前: 発言」。fail-closed: 置換後に既知語（ハンドル・ラベル・allow_words・チケットキー・文字を含まない時刻等）
 # 以外の行頭「X:」が残れば、形（全角空白・3 語以上・アクセント・カンマ・数字混じり）を問わず名簿外の人名の疑いとして数える
-SPEAKER_HEAD_RE = re.compile(r"^\s*(?:[-*・]\s*|\d+[.)]\s*)?(?P<head>[^:：、。]{1,24}?)\s*[:：]\s*\S")
+SPEAKER_HEAD_RE = re.compile(r"^\s*(?:[-*・]\s*|\d+[.)]\s*)?(?P<head>[^:：、。]{1,24}?)\s*[:：]")  # 行末コロン（字下げ箇条書きが続く形）も対象
 PAREN_RE = re.compile(r"\s*[（(][^()（）]*[)）]")  # 「山田 (PM)」の役割括弧は外して名前だけ見る
 TICKET_KEY_RE = re.compile(r"[A-Z][A-Z0-9]+-\d+")  # EX-102 のような Jira キー。人名ではない
 LABEL_WORDS = frozenset(w.casefold() for w in (

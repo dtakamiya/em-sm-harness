@@ -175,6 +175,13 @@ class MeetingPreprocessTest(unittest.TestCase):
             with self.assertRaises(sa.AnonymizeError, msg=line):
                 self.anonymize(line + "\n")
 
+    def test_trailing_colon_head_stops_but_known_labels_pass(self):
+        for line in ("- 山田:", "山田:", "- 山田 (PM):"):
+            with self.assertRaises(sa.AnonymizeError, msg=line):
+                self.anonymize(line + "\n  - 確認する\n")
+        _, _, count = self.anonymize("- 議事:\n  - 項目\n- Agenda:\n  - item\n- em:\n  - 共有\n")
+        self.assertEqual(count, 6)
+
     def test_non_name_heads_pass(self):
         _, _, count = self.anonymize("- https: 参照\n- 10:00 開始\n- 2026-10-09: 期限\n- EX-102: 保留\n- [URL]: 参照\n")
         self.assertEqual(count, 5)
