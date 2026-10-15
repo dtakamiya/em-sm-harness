@@ -24,6 +24,8 @@ class SlackPurgeTest(unittest.TestCase):
         for sub in ("", "parsed", "anon"):
             (self.base / sub).mkdir(parents=True, exist_ok=True)
         self.audit = self.tmp / "data" / "audit"
+        self.structured = self.tmp / "data" / "structured" / "slack"
+        self.structured.mkdir(parents=True)
 
     def put(self, rel, age_days, body="x"):
         path = self.base / rel
@@ -33,7 +35,7 @@ class SlackPurgeTest(unittest.TestCase):
 
     def run_cli(self, *args):
         out, err = io.StringIO(), io.StringIO()
-        argv = ["--base", str(self.base), "--audit-dir", str(self.audit), *args]
+        argv = ["--base", str(self.base), "--audit-dir", str(self.audit), "--structured-dir", str(self.structured), *args]
         with redirect_stdout(out), redirect_stderr(err):
             code = sp.main(argv, now=NOW)
         return code, out.getvalue(), err.getvalue()
@@ -121,7 +123,7 @@ class SlackPurgeTest(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         row = json.loads(lines[0])
         self.assertEqual(row["event"], "retention_purged")
-        self.assertEqual(row["deleted"], {"raw": 1, "parsed": 0, "anon": 1})
+        self.assertEqual(row["deleted"], {"raw": 1, "parsed": 0, "anon": 1, "structured": 0})
         self.assertNotIn("secret-name", lines[0])
         self.assertNotIn("SECRET-BODY", lines[0])
 
@@ -204,6 +206,80 @@ class SlackPurgeTest(unittest.TestCase):
         self.run_cli("--apply")
         mode = next(self.audit.glob("*.jsonl")).stat().st_mode & 0o777
         self.assertEqual(mode, 0o600)
+
+    def put_structured(self, name, age_days):
+        path = self.structured / name
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (NOW - age_days * DAY, NOW - age_days * DAY))
+        return path
+
+    def test_structured_keeps_13_days_and_deletes_15_days(self):
+        young, old = self.put_structured("a.json", 13), self.put_structured("b.json", 15)
+        code, _, _ = self.run_cli("--apply")
+        self.assertEqual(code, 0)
+        self.assertTrue(young.exists())
+        self.assertFalse(old.exists())
+
+    def test_structured_dry_run_deletes_nothing_and_reports_count(self):
+        old = self.put_structured("b.json", 30)
+        code, out, _ = self.run_cli()
+        self.assertEqual(code, 0)
+        self.assertTrue(old.exists())
+        self.assertIn("structured: 1", out)
+        self.assertFalse(self.audit.exists())
+
+    def test_structured_skips_dotfiles_and_subdirectories(self):
+        dot = self.put_structured(".seen.json", 99)
+        (self.structured / "sub").mkdir()
+        deep = self.structured / "sub" / "d.json"
+        deep.write_text("{}", encoding="utf-8")
+        os.utime(deep, (NOW - 99 * DAY, NOW - 99 * DAY))
+        self.run_cli("--apply")
+        self.assertTrue(dot.exists() and deep.exists())
+
+    def test_structured_unexpected_extension_refuses_and_deletes_nothing(self):
+        odd = self.put_structured("x.txt", 30)
+        old_anon = self.put("anon/a.json", 30)
+        code, _, err = self.run_cli("--apply")
+        self.assertEqual(code, 2)
+        self.assertTrue(odd.exists() and old_anon.exists())
+        self.assertNotIn("x.txt", err)
+
+    def test_structured_symlink_file_refuses_and_deletes_nothing(self):
+        outside = self.tmp / "o.json"
+        outside.write_text("keep", encoding="utf-8")
+        (self.structured / "l.json").symlink_to(outside)
+        old = self.put_structured("b.json", 30)
+        code, _, _ = self.run_cli("--apply")
+        self.assertEqual(code, 2)
+        self.assertTrue(old.exists() and outside.exists())
+
+    def test_structured_dir_symlink_refuses(self):
+        real = self.tmp / "elsewhere"
+        real.mkdir()
+        victim = real / "v.json"
+        victim.write_text("{}", encoding="utf-8")
+        os.utime(victim, (NOW - 99 * DAY, NOW - 99 * DAY))
+        self.structured.rmdir()
+        self.structured.symlink_to(real)
+        code, _, _ = self.run_cli("--apply")
+        self.assertEqual(code, 2)
+        self.assertTrue(victim.exists())
+
+    def test_missing_structured_dir_is_ignored(self):
+        self.structured.rmdir()
+        old = self.put("anon/a.json", 30)
+        code, _, _ = self.run_cli("--apply")
+        self.assertEqual(code, 0)
+        self.assertFalse(old.exists())
+
+    def test_structured_audit_has_count_only(self):
+        self.put_structured("secret-name.json", 30)
+        _, out, err = self.run_cli("--apply")
+        self.assertNotIn("secret-name", out + err)
+        text = next(self.audit.glob("*.jsonl")).read_text(encoding="utf-8")
+        self.assertNotIn("secret-name", text)
+        self.assertEqual(json.loads(text)["deleted"]["structured"], 1)
 
 
 if __name__ == "__main__":
