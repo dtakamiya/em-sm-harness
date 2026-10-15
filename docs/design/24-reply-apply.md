@@ -17,6 +17,7 @@
 | `完了 t-0001` | `done`。`next_check` は null | `✓ t-0001 完了` |
 | `先送り t-0001 2026-10-16` | `due` 変更。3回目で中止か分割かを促す | `→ t-0001 期限 10/9→10/16（3回目） ※先送りが続いています。中止 t-0001 か 分割 t-0001 案1 案2 かを決めてください` |
 | `中止 t-0001 [理由]` | `dropped`（04 の drop）。`next_check` は null。理由は空白なし 1 語で `history` に残す。判断依頼はこれで消える | `✗ t-0001 中止` |
+| `待ち t-0001 member-a [2026-10-12]` | `open`/`doing` → `waiting`（04 の wait）。`waiting_on` に相手の**匿名ハンドルのみ**（`make_draft.py` の `HANDLE` 形式。実名・空白は拒否）、`next_check` は確認日（省略時は [17 §2](17-task-priority-and-waiting.md)・Q-019 の登録 3 営業日後。土日のみ除く）。`history` に op=wait。既に待ち中・閉じたタスク・過去日付・日付の誤りは拒否。朝の計画の催促候補と夕方の新規待ちに出る | `⏳ t-0001 member-a 待ち（10/8 に確認）` |
 | `分割 t-0001 案1 案2 …` | 親を `dropped`（`history` に op=split）にし、案ごとに新規 `open` タスクを作る（2〜5 件・空白なしのタイトル、期限・優先度は親を引き継ぐ、notes に分割元）。監査は `new_task_ids` | `✂ t-0001 を分割 → t-0004 調査 / t-0005 実装` |
 
 - 実行: `python3 scripts/apply_reply.py "採用 c-0001" "完了 t-0002"`。確認だけなら `--dry-run`
@@ -35,7 +36,7 @@
 - `rejected.json` は反映側では**記録のみ**。再提案を止める参照側は取り込みスクリプト（`slack_to_candidates.py` / `meeting_to_candidates.py`）が実装済みで、同じ `source_ref` は候補にしない
 
 ## 受け入れ基準
-- 5種の返答が動く / 不正は全件拒否 / 監査に本文なし / `--undo` で全ファイルが元のバイト列に戻る
+- 8種の返答（採用/却下/後で/完了/先送り/中止/待ち/分割）が動く / 不正は全件拒否 / 監査に本文なし / `--undo` で全ファイルが元のバイト列に戻る
 - 異常系: 途中クラッシュ後の undo・`.bak` 欠落・`.bak` 不一致・監査不可・手編集後の undo
 - `python3 -m unittest discover -s tests` で通る（`tests/test_apply_reply.py`）
 

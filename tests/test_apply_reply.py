@@ -77,6 +77,43 @@ class ApplyReplyTest(unittest.TestCase):
         self.assertNotIn("c-0003", [c["id"] for c in mp.build_plan([], cands, TODAY)["candidates"]])
         self.assertIn("c-0003", [c["id"] for c in mp.build_plan([], cands, date(2026, 10, 6))["candidates"]])
 
+    def test_wait_sets_waiting_fields_default_check_is_3_business_days(self):
+        out = self.run_replies("待ち t-0001 member-b")
+        t = self.read("tasks.json", "tasks")[0]
+        self.assertEqual((t["status"], t["waiting_on"], t["next_check"]), ("waiting", "member-b", "2026-10-08"))
+        self.assertEqual(t["history"][-1], {"at": "2026-10-05", "op": "wait", "from": "open"})
+        self.assertEqual(out, ["⏳ t-0001 member-b 待ち（10/8 に確認）"])
+
+    def test_wait_default_check_skips_weekend(self):
+        self.assertEqual(ar._add_business_days(date(2026, 10, 9), 3), date(2026, 10, 14))
+
+    def test_wait_accepts_explicit_check_date_and_doing_task(self):
+        self.write("tasks.json", "tasks", [task("t-0001", "doing")])
+        self.run_replies("待ち t-0001 m_ab12cd 2026-10-20")
+        self.assertEqual(self.read("tasks.json", "tasks")[0]["next_check"], "2026-10-20")
+
+    def test_wait_rejects_bad_input_without_writing(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        for line in ("待ち t-0001 田中", "待ち t-0001 member-a 10/9", "待ち t-0001 member-a 2026-10-04",
+                     "待ち t-0003 member-a", "待ち t-0002 member-a", "待ち t-0001", "待ち t-0001 member-a 2026-10-09 x"):
+            with self.subTest(line=line), self.assertRaises(ar.ReplyError):
+                self.run_replies(line)
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+
+    def test_wait_appears_in_morning_nudges_and_evening_new_waiting_and_audit_has_no_handle(self):
+        import evening_wrapup as ew
+        self.run_replies("待ち t-0001 member-b 2026-10-05")
+        tasks = self.read("tasks.json", "tasks")
+        self.assertIn("t-0001", [t["id"] for t in mp.build_plan(tasks, [], TODAY)["nudges"]])
+        self.assertIn("t-0001", [t["id"] for t in ew.build_wrapup(tasks, TODAY)["new_waiting"]])
+        self.assertNotIn("member-b", (self.data / "audit" / "2026-10-05.jsonl").read_text(encoding="utf-8"))
+
+    def test_wait_undo_restores_original_bytes(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        self.run_replies("待ち t-0001 member-b")
+        ar.undo(self.data, now=NOW)
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+
     def test_done_clears_next_check_and_appends_history(self):
         self.run_replies("完了 t-0002")
         t = [x for x in self.read("tasks.json", "tasks") if x["id"] == "t-0002"][0]
