@@ -152,6 +152,59 @@ class SlackPurgeTest(unittest.TestCase):
         _, out, _ = self.run_cli()
         self.assertIn("anon: 2", out)
 
+    def test_exactly_14_days_is_kept(self):
+        keep = self.put("anon/a.json", 14)
+        self.run_cli("--apply")
+        self.assertTrue(keep.exists())
+
+    def test_symlink_inside_parsed_refuses(self):
+        outside = self.tmp / "o.txt"
+        outside.write_text("keep", encoding="utf-8")
+        (self.base / "parsed" / "l.json").symlink_to(outside)
+        old = self.put("paste.md", 30)
+        code, _, _ = self.run_cli("--apply")
+        self.assertEqual(code, 2)
+        self.assertTrue(old.exists())
+
+    def test_dry_run_with_symlink_exits_2(self):
+        (self.base / "anon" / "l.json").symlink_to(self.tmp)
+        code, _, _ = self.run_cli()
+        self.assertEqual(code, 2)
+
+    def test_unlink_failure_counts_only_and_still_audits(self):
+        ok, bad = self.put("anon/a.json", 30), self.put("anon/secret-name.json", 30)
+        real = Path.unlink
+
+        def flaky(path, *a, **k):
+            if path.name == "secret-name.json":
+                raise PermissionError(13, "Permission denied", str(path))
+            return real(path, *a, **k)
+
+        from unittest import mock
+        with mock.patch.object(Path, "unlink", flaky):
+            code, out, err = self.run_cli("--apply")
+        self.assertEqual(code, 2)
+        self.assertFalse(ok.exists())
+        self.assertTrue(bad.exists())
+        self.assertNotIn("secret-name", out + err)
+        row = json.loads(next(self.audit.glob("*.jsonl")).read_text(encoding="utf-8"))
+        self.assertEqual((row["deleted"]["anon"], row["failed"]), (1, 1))
+
+    def test_scan_oserror_exits_2_without_names(self):
+        from unittest import mock
+        self.put("anon/secret-name.json", 30)
+        err_ = PermissionError(13, "Permission denied", str(self.base / "anon" / "secret-name.json"))
+        with mock.patch.object(Path, "iterdir", side_effect=err_):
+            code, out, err = self.run_cli("--apply")
+        self.assertEqual(code, 2)
+        self.assertNotIn("secret-name", out + err)
+
+    def test_audit_file_is_0600(self):
+        self.put("anon/a.json", 30)
+        self.run_cli("--apply")
+        mode = next(self.audit.glob("*.jsonl")).stat().st_mode & 0o777
+        self.assertEqual(mode, 0o600)
+
 
 if __name__ == "__main__":
     unittest.main()

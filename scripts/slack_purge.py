@@ -7,7 +7,8 @@
 - シンボリックリンク（base・対象ディレクトリ・ファイル）や範囲外に解決されるものが1つでもあれば、何も消さずに終了コード 2。
 - 期限は更新時刻（mtime）で判定。load_anon() と同じく 14 日を超えたもの（13 日は残る・15 日は消える）。
 - 出力・監査にファイル名は出さない（raw のファイル名に実名が入り得るため）。件数のみ。
-- 監査は data/audit/YYYY-MM-DD.jsonl に 1 行（本文・ファイル名なし）。書けないときは消す前に止める。
+- 監査は data/audit/YYYY-MM-DD.jsonl に 1 行（本文・ファイル名なし）。書けないときは消す前に止める。部分的に消せた場合も監査は必ず書く（失敗件数つき）。
+- structured/slack/ は対象外（手動削除）。
 """
 import argparse
 import json
@@ -24,6 +25,7 @@ RETENTION_DAYS = 14
 SECONDS_PER_DAY = 86400
 AREAS = (("raw", ""), ("parsed", "parsed"), ("anon", "anon"))  # (監査上の名前, base からの相対ディレクトリ)
 EXIT_REFUSED = 2
+AUDIT_FILE_MODE = 0o600
 
 
 class PurgeError(Exception):
@@ -68,10 +70,16 @@ def collect(base, now):
     return {name: _scan_area(base, resolved_base, name, sub, cutoff) for name, sub in AREAS}
 
 
+def _open_audit(audit_dir, now):
+    """監査ファイルを追記で開く。新規作成は 0600（本文なしでも他ユーザーには見せない）。"""
+    fd = os.open(audit_dir / f"{_day(now)}.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT, AUDIT_FILE_MODE)
+    return os.fdopen(fd, "a", encoding="utf-8")
+
+
 def _ensure_audit_writable(audit_dir, now):
     try:
         audit_dir.mkdir(parents=True, exist_ok=True)
-        (audit_dir / f"{_day(now)}.jsonl").open("a", encoding="utf-8").close()
+        _open_audit(audit_dir, now).close()
     except OSError as exc:
         raise PurgeError(f"監査ログに書けません（{exc.strerror}）。監査なしでは削除しません")
 
@@ -80,26 +88,33 @@ def _day(now):
     return datetime.fromtimestamp(now).date().isoformat()
 
 
-def _append_audit(audit_dir, now, deleted):
+def _append_audit(audit_dir, now, deleted, failed):
     row = {"ts": datetime.fromtimestamp(now).astimezone().isoformat(timespec="seconds"), "event": "retention_purged",
-           "action": "slack.purge", "level_applied": "L0", "retention_days": RETENTION_DAYS, "deleted": deleted}
-    with (audit_dir / f"{_day(now)}.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+           "action": "slack.purge", "level_applied": "L0", "retention_days": RETENTION_DAYS, "deleted": deleted, "failed": failed}
+    try:
+        with _open_audit(audit_dir, now) as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise PurgeError(f"削除後に監査ログへ書けませんでした（{exc.strerror}）。削除は実施済みです")
 
 
 def _delete(found):
-    """直前に再確認して unlink。消えていた・リンクに変わっていたものは数えない。"""
+    """直前に再確認して unlink。消えていた・リンクに変わっていたものは数えず、失敗は件数だけ数える（名前は出さない）。"""
     deleted = {name: 0 for name, _ in AREAS}
+    failed = 0
     for name, files in found.items():
         for path in files:
-            if path.is_symlink() or not path.is_file():
-                continue
             try:
+                if path.is_symlink() or not path.is_file():
+                    continue
                 path.unlink()
             except FileNotFoundError:
                 continue
+            except OSError:
+                failed += 1
+                continue
             deleted[name] += 1
-    return deleted
+    return deleted, failed
 
 
 def main(argv=None, now=None):
@@ -122,12 +137,18 @@ def main(argv=None, now=None):
             print("期限切れはありません")
             return 0
         _ensure_audit_writable(args.audit_dir, now)
-        deleted = _delete(found)
-        _append_audit(args.audit_dir, now, deleted)
+        deleted, failed = _delete(found)
+        _append_audit(args.audit_dir, now, deleted, failed)
         print(f"削除しました: {sum(deleted.values())} 件 / " + ", ".join(f"{k}: {v}" for k, v in deleted.items()))
+        if failed:
+            print(f"削除に失敗したものが {failed} 件あります（権限などを確認して再実行してください）", file=sys.stderr)
+            return EXIT_REFUSED
         return 0
     except PurgeError as exc:
         print(str(exc), file=sys.stderr)
+        return EXIT_REFUSED
+    except OSError as exc:  # 例外メッセージにファイル名が入るので出さない
+        print(f"ファイル操作に失敗しました（{exc.strerror}）。ファイル名は表示しません", file=sys.stderr)
         return EXIT_REFUSED
 
 
