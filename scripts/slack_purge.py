@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Slack の raw / parsed / anon のうち 14 日を過ぎたファイルを消す（13 §8, Q-016）。ローカルのみ・stdlib のみ・外部接続なし。
+"""Slack の raw / parsed / anon / structured のうち 14 日を過ぎたファイルを消す（13 §8, Q-016）。ローカルのみ・stdlib のみ・外部接続なし。
 
 - 既定は --dry-run（件数だけ出す）。--apply を付けたときだけ削除する。
 - 対象は base（既定 data/inbox/slack/）直下の通常ファイル（raw）と parsed/・anon/ 直下の通常ファイルだけ。
-  サブディレクトリの中・structured/・先頭ドットのファイル（台帳 .seen.json 等）は触らない。
+  サブディレクトリの中・先頭ドットのファイル（台帳 .seen.json 等）は触らない。
 - シンボリックリンク（base・対象ディレクトリ・ファイル）や範囲外に解決されるものが1つでもあれば、何も消さずに終了コード 2。
 - 期限は更新時刻（mtime）で判定。load_anon() と同じく 14 日を超えたもの（13 日は残る・15 日は消える）。
 - 出力・監査にファイル名は出さない（raw のファイル名に実名が入り得るため）。件数のみ。
 - 監査は data/audit/YYYY-MM-DD.jsonl に 1 行（本文・ファイル名なし）。書けないときは消す前に止める。部分的に消せた場合も監査は必ず書く（失敗件数つき）。
-- structured/slack/ は対象外（手動削除）。
+- structured/slack/（--structured-dir。既定 data/structured/slack/）直下の *.json も同じ 14 日で対象（quote・signal を含むため。13 §8）。
+  ディレクトリが無ければ黙って飛ばす。.json 以外の通常ファイルが 1 つでもあれば何も消さず終了コード 2。90 日の集計値は引用なしで対象外。
 """
 import argparse
 import json
@@ -20,10 +21,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = ROOT / "data" / "inbox" / "slack"
+DEFAULT_STRUCTURED = ROOT / "data" / "structured" / "slack"
 DEFAULT_AUDIT_DIR = ROOT / "data" / "audit"
 RETENTION_DAYS = 14
 SECONDS_PER_DAY = 86400
 AREAS = (("raw", ""), ("parsed", "parsed"), ("anon", "anon"))  # (監査上の名前, base からの相対ディレクトリ)
+STRUCTURED = "structured"
+STRUCTURED_SUFFIX = ".json"
 EXIT_REFUSED = 2
 AUDIT_FILE_MODE = 0o600
 
@@ -62,12 +66,35 @@ def _scan_area(base, resolved_base, name, sub, cutoff):
     return expired
 
 
-def collect(base, now):
+def _scan_structured(directory, cutoff):
+    """structured/slack/ 直下の期限切れ *.json を返す。無ければ空。リンク・想定外の拡張子は PurgeError。"""
+    if not directory.exists() and not directory.is_symlink():
+        return []
+    resolved_dir = _real_dir(directory, f"{STRUCTURED} ディレクトリ")
+    expired = []
+    for entry in sorted(directory.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        if entry.is_symlink():
+            raise PurgeError(f"{STRUCTURED} にシンボリックリンクがあります。何も削除しません")
+        if not entry.is_file() or entry.resolve().parent != resolved_dir:
+            continue
+        if entry.suffix != STRUCTURED_SUFFIX:
+            raise PurgeError(f"{STRUCTURED} に想定外の拡張子のファイルがあります。何も削除しません")
+        if entry.lstat().st_mtime < cutoff:
+            expired.append(entry)
+    return expired
+
+
+def collect(base, now, structured_dir=None):
     """{領域名: [期限切れファイル]} を返す。1 つでも拒否条件があれば PurgeError。"""
     base = Path(base)
     resolved_base = _real_dir(base, "base")
     cutoff = now - RETENTION_DAYS * SECONDS_PER_DAY
-    return {name: _scan_area(base, resolved_base, name, sub, cutoff) for name, sub in AREAS}
+    found = {name: _scan_area(base, resolved_base, name, sub, cutoff) for name, sub in AREAS}
+    structured = Path(DEFAULT_STRUCTURED if structured_dir is None else structured_dir)
+    found[STRUCTURED] = _scan_structured(structured, cutoff)
+    return found
 
 
 def _open_audit(audit_dir, now):
@@ -100,7 +127,7 @@ def _append_audit(audit_dir, now, deleted, failed):
 
 def _delete(found):
     """直前に再確認して unlink。消えていた・リンクに変わっていたものは数えず、失敗は件数だけ数える（名前は出さない）。"""
-    deleted = {name: 0 for name, _ in AREAS}
+    deleted = {name: 0 for name in found}
     failed = 0
     for name, files in found.items():
         for path in files:
@@ -118,8 +145,9 @@ def _delete(found):
 
 
 def main(argv=None, now=None):
-    parser = argparse.ArgumentParser(description="Slack の raw/parsed/anon の 14 日経過分を消す（既定は dry-run）")
+    parser = argparse.ArgumentParser(description="Slack の raw/parsed/anon/structured の 14 日経過分を消す（既定は dry-run）")
     parser.add_argument("--base", type=Path, default=DEFAULT_BASE, help="data/inbox/slack/ 相当")
+    parser.add_argument("--structured-dir", type=Path, default=DEFAULT_STRUCTURED, help="data/structured/slack/ 相当")
     parser.add_argument("--audit-dir", type=Path, default=DEFAULT_AUDIT_DIR)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="件数だけ出す（既定）")
@@ -127,7 +155,7 @@ def main(argv=None, now=None):
     args = parser.parse_args(argv)
     now = time.time() if now is None else now
     try:
-        found = collect(args.base, now)
+        found = collect(args.base, now, args.structured_dir)
         total = sum(len(v) for v in found.values())
         counts = ", ".join(f"{name}: {len(files)}" for name, files in found.items())
         if not args.apply:
