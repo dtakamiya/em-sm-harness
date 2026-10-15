@@ -12,7 +12,10 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from make_draft import HANDLE
+
 LATER_DAYS = 1
+WAIT_FIRST_CHECK_BDAYS = 3  # Q-019 a: 登録の 3 営業日後が最初の確認日
 DEFER_ASK_COUNT = 3
 MIN_SPLIT_TITLES = 2
 MAX_SPLIT_TITLES = 5
@@ -65,14 +68,23 @@ def _day(text, label):
         raise ReplyError(f"{label} は YYYY-MM-DD で指定してください（受け取った値: {text}）")
 
 
+def _add_business_days(start, days):
+    """土日を除いて days 営業日後（祝日は見ない。17 §2）。"""
+    cur = start
+    while days:
+        cur += timedelta(days=1)
+        days -= cur.weekday() < 5
+    return cur
+
+
 def parse(line):
     """定型語 1 行 → (op, id, 追加引数)。曖昧なものは拒否する（推測しない）。"""
     parts = line.split()
     ops = {"採用": ("adopt", 0, 0), "却下": ("reject", 0, 0), "後で": ("later", 0, 1),
            "完了": ("done", 0, 0), "先送り": ("defer", 1, 1),
-           "中止": ("drop", 0, 1), "分割": ("split", MIN_SPLIT_TITLES, MAX_SPLIT_TITLES - MIN_SPLIT_TITLES)}
+           "中止": ("drop", 0, 1), "待ち": ("wait", 1, 1), "分割": ("split", MIN_SPLIT_TITLES, MAX_SPLIT_TITLES - MIN_SPLIT_TITLES)}
     if not parts or parts[0] not in ops:
-        raise ReplyError(f"解釈できません: 「{line}」。書式は 採用/却下/後で/完了/先送り/中止/分割 + id（先送りは日付、分割は 2〜5 件のタイトルも）")
+        raise ReplyError(f"解釈できません: 「{line}」。書式は 採用/却下/後で/完了/先送り/中止/待ち/分割 + id（先送りは日付、待ちは相手ハンドルと任意の確認日、分割は 2〜5 件のタイトルも）")
     op, need, optional = ops[parts[0]]
     args = parts[1:]
     if not args:
@@ -131,6 +143,8 @@ def apply_one(state, op, target, extra, today, archive_dir):
         reason = {"reason": extra[0]} if extra else {}
         new = _with_history(task, today, {"op": "drop", "from": task["status"], **reason}, status="dropped", next_check=None)
         return {**state, "tasks": [new if t["id"] == target else t for t in tasks]}, f"✗ {target} 中止"
+    if op == "wait":
+        return _wait(state, task, extra, today)
     if op == "split":
         return _split(state, task, extra, today, archive_dir)
     if op == "done":
@@ -146,6 +160,22 @@ def apply_one(state, op, target, extra, today, archive_dir):
         if count >= DEFER_ASK_COUNT:
             line += f" ※先送りが続いています。中止 {target} か 分割 {target} 案1 案2 かを決めてください"
     return {**state, "tasks": [new if t["id"] == target else t for t in tasks]}, line
+
+
+def _wait(state, task, extra, today):
+    """open/doing → waiting。相手は匿名ハンドルのみ。確認日の既定は 3 営業日後。"""
+    handle = extra[0]
+    if task["status"] == "waiting":
+        raise ReplyError(f"{task['id']} は既に待ち中です（相手を変えるなら先に 完了/中止 か、EM が手で直してください）")
+    if not HANDLE.fullmatch(handle):
+        raise ReplyError(f"相手は匿名ハンドル（例 member-a）で指定してください: {handle}")
+    check = _day(extra[1], "確認日") if len(extra) > 1 else _add_business_days(today, WAIT_FIRST_CHECK_BDAYS)
+    if check < today:
+        raise ReplyError(f"確認日 {check.isoformat()} は過去です（今日 {today.isoformat()} 以降で指定してください）")
+    new = _with_history(task, today, {"op": "wait", "from": task["status"]},
+                        status="waiting", waiting_on=handle, next_check=check.isoformat())
+    return ({**state, "tasks": [new if t["id"] == task["id"] else t for t in state["tasks"]]},
+            f"⏳ {task['id']} {handle} 待ち（{_md(check)} に確認）")
 
 
 def _split(state, parent, titles, today, archive_dir):
@@ -170,7 +200,7 @@ ACTOR = "secretary"
 
 OP_FILES = {"adopt": ("tasks.json", "candidates.json"), "reject": ("candidates.json", "rejected.json"),
             "later": ("candidates.json",), "done": ("tasks.json",), "defer": ("tasks.json",),
-            "drop": ("tasks.json",), "split": ("tasks.json",)}
+            "drop": ("tasks.json",), "wait": ("tasks.json",), "split": ("tasks.json",)}
 
 
 def _audit_rows(now, batch_id, parsed, before, after, new_ids):
@@ -285,7 +315,7 @@ def _atomic_write_bytes(path, content):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="EM の返答を data/tasks に反映する（ローカルのみ）")
-    ap.add_argument("replies", nargs="*", help="1返答=1引数（引用符で囲む）。例: 採用 c-0001 / 却下 c-0002 / 後で c-0003 [日付] / 完了 t-0001 / 先送り t-0003 2026-10-16")
+    ap.add_argument("replies", nargs="*", help="1返答=1引数（引用符で囲む）。例: 採用 c-0001 / 却下 c-0002 / 後で c-0003 [日付] / 完了 t-0001 / 先送り t-0003 2026-10-16 / 待ち t-0004 member-a [確認日]")
     ap.add_argument("--data-dir", default="data")
     ap.add_argument("--today", default=date.today().isoformat())
     ap.add_argument("--dry-run", action="store_true", help="書かずに結果だけ表示")
