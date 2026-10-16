@@ -44,7 +44,7 @@
 
 ## 4. 実装への反映（本 PR）
 - `scripts/morning_plan.py` の並べ順に 3 段目（`blocks` の数）を追加。他は 15 の暫定ルールと同じ
-- 催促回数は**数える側のみ**実装済み（`history` の `op: nudge` を読む。`morning_plan.py` の `_nudge_count` = 催促回数を数える内部関数）。登録（`待ち t-0001 member-a`、[24](24-reply-apply.md)）は実装済み。`nudge` を `history` に書く側も実装済み（`催促済 t-0001 [次の確認日]`、返信が来たら `再開 t-0001`。[24](24-reply-apply.md)）。3 回 defer の問い（朝夕の計画の内部名 `defer_asks` = 先送り3回目の判断依頼候補。[25](25-evening-wrapup.md)）は実装済み。営業日計算と、期限超過・14 日動きなしの棚卸しは未実装（本書が仕様）
+- 催促回数は**数える側も書く側も**実装済み（`history` の `op: nudge` を読む。`morning_plan.py` の `_nudge_count` = 催促回数を数える内部関数）。登録（`待ち t-0001 member-a`、[24](24-reply-apply.md)）は実装済み。`nudge` を `history` に書く側は `apply_reply.py`（`催促済 t-0001 [次の確認日]`、返信が来たら `再開 t-0001`。[24](24-reply-apply.md)）で実装済み。3 回目の判断依頼への切替は未実装（Q-019）。3 回 defer の問い（朝夕の計画の内部名 `defer_asks` = 先送り3回目の判断依頼候補。[25](25-evening-wrapup.md)）は実装済み。営業日計算は `apply_reply.py` の `_add_business_days`（土日のみ除外・祝日は見ない）で実装済み。期限超過・14 日動きなしの棚卸しは未実装（本書が仕様）
 
 ## 5. 受け入れ基準
 - 同じ入力で並べ順が常に同一（決定的）
