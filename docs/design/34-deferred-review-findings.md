@@ -47,7 +47,7 @@ board の notes や作業ログに「L1〜L7 は後回し」とだけ書くと�
 | D-016 | #99 / emh-085 MEDIUM | slack_preprocess が空・解釈できない貼り付けでも成功終了（0）し、空の出力と台帳を書く（fail-open） | 範囲外（今回は表とテストまで。修正は別項目）。実害は空出力が増える程度 | slack_preprocess を触るとき | open |
 | D-017 | #99 / emh-085 MEDIUM | slack_preprocess が front matter の値（channel_alias 等）を検証せず通す。出力名は貼り付け名由来のため現状の実害は小さい | 範囲外（同上） | slack_preprocess を触るとき・meta を出力名や参照に使うとき | open |
 | D-018 | #99 / emh-085 MEDIUM | 停止時の終了コードが 27 §8 の 2 と違う（slack_preprocess は全停止が 1、calendar は空・読めない行が 1） | 既存の挙動。calendar の 1 は「直して再実行」の意図があり、変更は呼び出し側にも影響 | 該当 script を触るとき（27 §7 に従い新規・修正時に寄せる） | open |
-| D-019 | #99 / emh-085 LOW | calendar_paste_to_meetings が同じ貼り付け内の完全に同じ会議（同日・同題名）を重複して出す | 範囲外。同題名の会議が実在し得るため、除外か警告かは未決 | calendar を触るとき | open |
+| D-019 | #99 / emh-085 LOW | calendar_paste_to_meetings が同じ貼り付け内の完全に同じ会議（同日・同題名）を重複して出す | 範囲外（今回は表とテストまで）。あるべき挙動は 27 §8 に従い止める（実在の同題名会議なら EM が片方を消して再実行） | calendar を触るとき | open |
 
 注: D-003〜D-006 の L 番号の対応は不明。#64 の別目の指摘本文は PR に残っておらず、現時点で復元できない。
 原文の捜索は em-builder が 2026-10-19 までに行う（作業ログ・子セッション履歴）。**見つからなければ『不明』のまま close**し、以後は探さない。

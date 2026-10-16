@@ -226,8 +226,8 @@ class AdversarialInputTest(AdversarialBase):
 
     def test_a7_calendar_duplicate_events_in_one_paste(self):
         paste = self.write("in/c.txt", "10/12\n10:00 会議A\n10/12\n10:00 会議A\n")
-        _, stdout = self.call(cp.main, paste, "--year", 2026)
-        self.assertEqual(len(json.loads(stdout)["meetings"]), 1)
+        code, _ = self.calendar(paste)  # 27 §8: 判定できない重複は黙って通さず、止めて何も書かない
+        self.assert_stopped(code)
 
     test_a7_calendar_duplicate_events_in_one_paste = unittest.expectedFailure(test_a7_calendar_duplicate_events_in_one_paste)  # D-019
 
