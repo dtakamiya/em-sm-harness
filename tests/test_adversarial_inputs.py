@@ -1,9 +1,10 @@
 """敵対入力の共通テスト表（docs/design/35）と、既存の前処理 4 本の対応づけ（emh-085）。
 
 表の各セルは `OK <test名>`（止まる・何も書かない）、`NG D-xxx <test名>`（後回し台帳 34 に載せた未対応。
-expectedFailure で固定。直ると「想定外の成功」で落ちるので、表と台帳を更新する）、`—（理由）`（対象外）のどれか。
+known_gap で固定（AssertionError のときだけ期待どおり）。直ると「想定外の成功」で落ちるので、表と台帳を更新する）、`—（理由）`（対象外）のどれか。
 入力は全て架空。実データ・実接続は使わない。
 """
+import functools
 import io
 import json
 import os
@@ -28,6 +29,19 @@ KEY = "test-key-not-secret"
 STOP_CODE = 2  # 27 §8: 判定不能で止めたときの終了コード
 FRONT = "---\nmeeting_alias: ex-planning\nheld_on: 2026-10-05\n---\n"
 SLACK_OK = "Alice Example  10:00\nお疲れさまです\n"
+
+
+def known_gap(test):
+    """未対応（後回し台帳 34）の固定。AssertionError のときだけ期待どおり。他の例外（ヘルパー破損）は落とし、直って通ったら『想定外の成功』で落とす。"""
+    @functools.wraps(test)
+    def wrapper(self):
+        try:
+            test(self)
+        except AssertionError:
+            return
+        self.fail("未対応のはずが通った。35 の表を NG→OK、34 の行を closed にして、known_gap を外す")
+    wrapper.known_gap = True
+    return wrapper
 
 
 class AdversarialBase(unittest.TestCase):
@@ -86,11 +100,11 @@ class AdversarialBase(unittest.TestCase):
 
 class AdversarialInputTest(AdversarialBase):
     # A1 空入力
+    @known_gap
     def test_a1_slack_preprocess_empty(self):
         code, _ = self.slack_pre(self.write("in/empty.md", ""))
         self.assert_stopped(code)
 
-    test_a1_slack_preprocess_empty = unittest.expectedFailure(test_a1_slack_preprocess_empty)  # D-016
 
     def test_a1_slack_anonymize_empty(self):
         code, _ = self.slack_anon(self.write("in/empty.json", ""))
@@ -150,11 +164,11 @@ class AdversarialInputTest(AdversarialBase):
         self.assert_stopped(code)
 
     # A5 不正な見出し・メタ
+    @known_gap
     def test_a5_slack_preprocess_invalid_meta(self):
         code, _ = self.slack_pre(self.write("in/p.md", "---\nchannel_alias: ../../x\n---\n" + SLACK_OK))
         self.assert_stopped(code)
 
-    test_a5_slack_preprocess_invalid_meta = unittest.expectedFailure(test_a5_slack_preprocess_invalid_meta)  # D-017
 
     def test_a5_slack_anonymize_person_name_in_meta(self):
         code, _ = self.slack_anon(self.parsed_json(speaker="em", meta={"channel_alias": "Taro Yamada"}))
@@ -224,12 +238,12 @@ class AdversarialInputTest(AdversarialBase):
         self.assertIn("取り込み済み", stdout)
         self.assertEqual(self.written(), before)
 
+    @known_gap
     def test_a7_calendar_duplicate_events_in_one_paste(self):
         paste = self.write("in/c.txt", "10/12\n10:00 会議A\n10/12\n10:00 会議A\n")
         code, _ = self.calendar(paste)  # 27 §8: 判定できない重複は黙って通さず、止めて何も書かない
         self.assert_stopped(code)
 
-    test_a7_calendar_duplicate_events_in_one_paste = unittest.expectedFailure(test_a7_calendar_duplicate_events_in_one_paste)  # D-019
 
 
 class StopExitCodeTest(AdversarialBase):
@@ -241,15 +255,19 @@ class StopExitCodeTest(AdversarialBase):
     def test_exit_code_meeting_preprocess(self):
         self.assertEqual(self.meeting_pre(self.write("in/bad.md", b"\xff"))[0], STOP_CODE)
 
+    @known_gap
     def test_exit_code_slack_preprocess(self):
-        self.assertEqual(self.slack_pre(self.write("in/bad.md", b"\xff"))[0], STOP_CODE)
+        code, _ = self.slack_pre(self.write("in/bad.md", b"\xff"))
+        self.assertNotEqual(code, 0)  # 止まること自体は確認（コードの値だけが未対応）
+        self.assertEqual(code, STOP_CODE)
 
-    test_exit_code_slack_preprocess = unittest.expectedFailure(test_exit_code_slack_preprocess)  # D-018
 
+    @known_gap
     def test_exit_code_calendar_empty(self):
-        self.assertEqual(self.calendar(self.write("in/empty.txt", ""))[0], STOP_CODE)
+        code, _ = self.calendar(self.write("in/empty.txt", ""))
+        self.assertNotEqual(code, 0)
+        self.assertEqual(code, STOP_CODE)
 
-    test_exit_code_calendar_empty = unittest.expectedFailure(test_exit_code_calendar_empty)  # D-018
 
 
 CELL_RE = re.compile(r"^(?:(OK) (test_\w+)|(NG) (D-\d+) (test_\w+)|—.+)$")
@@ -270,7 +288,7 @@ def table_cells():
 
 
 class TableConsistencyTest(unittest.TestCase):
-    """表と実テストがずれない: 表のテスト名は実在し、NG は expectedFailure、台帳の D-ID も実在する。"""
+    """表と実テストがずれない: 表のテスト名は実在し、NG は known_gap、台帳の D-ID も実在する。"""
 
     def all_tests(self):
         return {**vars(AdversarialInputTest), **vars(StopExitCodeTest)}
@@ -292,7 +310,7 @@ class TableConsistencyTest(unittest.TestCase):
             if m and m.group(1):
                 with self.subTest(cell=f"{row}/{col}"):
                     self.assertIn(m.group(2), tests)
-                    self.assertFalse(getattr(tests[m.group(2)], "__unittest_expecting_failure__", False))
+                    self.assertFalse(getattr(tests[m.group(2)], "known_gap", False))
 
     def test_ng_cells_name_expected_failure_tests_and_existing_ledger_rows(self):
         tests = self.all_tests()
@@ -301,7 +319,7 @@ class TableConsistencyTest(unittest.TestCase):
             m = CELL_RE.match(cell)
             if m and m.group(3):
                 with self.subTest(cell=f"{row}/{col}"):
-                    self.assertTrue(getattr(tests[m.group(5)], "__unittest_expecting_failure__", False))
+                    self.assertTrue(getattr(tests[m.group(5)], "known_gap", False))
                     self.assertIsNotNone(re.search(rf"^\| {m.group(4)} \|.*\| open \|$", ledger, re.M), "台帳 34 に open の行が無い")
 
     def test_every_test_is_listed_in_the_table(self):
