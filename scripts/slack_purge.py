@@ -97,6 +97,28 @@ def collect(base, now, structured_dir=None):
     return found
 
 
+PURGE_COMMAND = "python3 scripts/slack_purge.py"
+
+
+def pending_notice(base=DEFAULT_BASE, structured_dir=DEFAULT_STRUCTURED, now=None):
+    """朝の計画・check_env 用の1行。読み取り専用（削除・書き込みなし）。出すものが無ければ None。
+
+    件数と実行コマンド名だけを返す（ファイル名・本文は出さない）。判定は collect() を再利用する。
+    期限切れ判定で拒否条件（リンク・.json 以外）に当たれば「purge が止まる状態」と1行で返す。
+    """
+    base = Path(base)
+    if not base.exists() and not base.is_symlink():
+        return None  # Slack を一度も貼っていない環境では何も足さない
+    now = time.time() if now is None else now
+    try:
+        total = sum(len(files) for files in collect(base, now, structured_dir).values())
+    except (PurgeError, OSError):
+        return f"Slack 一時ファイルの purge が止まる状態です（リンクや想定外のファイルあり）。`{PURGE_COMMAND}` で理由を確認"
+    if total == 0:
+        return None
+    return f"Slack 一時ファイル: {RETENTION_DAYS} 日超の削除対象 {total} 件（削除はしていません）。確認: `{PURGE_COMMAND}`"
+
+
 def _open_audit(audit_dir, now):
     """監査ファイルを追記で開く。新規作成は 0600（本文なしでも他ユーザーには見せない）。"""
     fd = os.open(audit_dir / f"{_day(now)}.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT, AUDIT_FILE_MODE)
