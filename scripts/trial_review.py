@@ -46,10 +46,10 @@ def parse_start_date(raw, today):
         parsed = date.fromisoformat(raw)
     except ValueError:
         raise TrialReviewError(
-            f"trial.start_date「{raw}」は ISO 日付（YYYY-MM-DD）ではありません。直すまで集計しません"
+            "trial.start_date は ISO 日付（YYYY-MM-DD）ではありません。直すまで集計しません"
             "（空に戻せば監査ログ最古日を仮の開始日にします）") from None
     if parsed > today:
-        raise TrialReviewError(f"trial.start_date「{raw}」が未来日です（今日 {today.isoformat()}・JST）。直すまで集計しません")
+        raise TrialReviewError(f"trial.start_date が未来日です（今日 {today.isoformat()}・JST）。直すまで集計しません")
     return parsed
 
 
@@ -63,23 +63,29 @@ def _row_day(row):
 
 
 def load_audit(audit_dir):
-    """(日付つきの行, 読めなかった行数)。summary/ は読まない。"""
-    rows, skipped = [], 0
+    """日付つきの行。summary/ は読まない。壊れた行・ts が読めない行・UTF-8 外は数字がずれるので停止する（27 §8）。"""
+    rows, unreadable = [], 0
     for path in sorted(Path(audit_dir).glob("*.jsonl")) if Path(audit_dir).is_dir() else []:
-        for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            raise TrialReviewError("監査ログに UTF-8 として読めないファイルがあります。直すまで集計しません") from None
+        for line in lines:
             if not line.strip():
                 continue
             try:
                 row = json.loads(line)
             except json.JSONDecodeError:
-                skipped += 1
+                unreadable += 1
                 continue
             day = _row_day(row) if isinstance(row, dict) else None
             if day is None:
-                skipped += 1
+                unreadable += 1
                 continue
             rows.append({**row, "_day": day})
-    return rows, skipped
+    if unreadable:
+        raise TrialReviewError(f"監査ログに読めない行が {unreadable} 行あります（壊れた JSON か ts 不明）。直すまで集計しません")
+    return rows
 
 
 def load_tasks(tasks_path):
@@ -88,11 +94,37 @@ def load_tasks(tasks_path):
     except FileNotFoundError:
         return None
     except json.JSONDecodeError as exc:
-        raise TrialReviewError(f"{tasks_path} が壊れています（{exc.msg}）。M6 は集計しません") from None
+        raise TrialReviewError(f"tasks.json が壊れています（{exc.msg}）。直すまで集計しません") from None
     tasks = data.get("tasks") if isinstance(data, dict) else None
     if not isinstance(tasks, list):
-        raise TrialReviewError(f"{tasks_path} の形式が不正です。M6 は集計しません")
+        raise TrialReviewError("tasks.json の形式が不正です。直すまで集計しません")
+    for index, task in enumerate(tasks, 1):
+        _check_task(task, index)
     return tasks
+
+
+def _check_task(task, index):
+    """M6 が読む形（dict・id・status・due・history）を検査する。"""
+    problem = None
+    if not isinstance(task, dict):
+        problem = "オブジェクトではありません"
+    elif not isinstance(task.get("id"), str) or not task["id"]:
+        problem = "id がありません"
+    elif task.get("due") is not None and not _is_iso_date(task["due"]):
+        problem = "due が ISO 日付ではありません"
+    elif not isinstance(task.get("history", []), list) or not all(
+            isinstance(h, dict) for h in task.get("history", [])):
+        problem = "history が不正です"
+    if problem:
+        raise TrialReviewError(f"tasks.json の {index} 件目: {problem}。直すまで集計しません")
+
+
+def _is_iso_date(value):
+    try:
+        date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def resolve_period(start, rows, today):
@@ -130,17 +162,18 @@ def _unique_items(rows):
 
 
 def _matched(items, results):
-    """照合できた件と、照合不能（結果が edited / adopted_as_is でない）の件数。"""
+    """照合できた件・照合不能（em_reviewed が無い等）の件数・却下（rejected）の件数。"""
     matched = {aid: results[aid] for aid in items if results.get(aid) in MATCHED_RESULTS}
-    return matched, len(items) - len(matched)
+    rejected = sum(results.get(aid) == "rejected" for aid in items)
+    return matched, len(items) - len(matched) - rejected, rejected
 
 
 def metric_m2(rows):
     items = {aid: r for aid, r in _unique_items(rows).items() if r.get("bucket") == "bulk"}
-    matched, unmatched = _matched(items, _results_by_action(rows))
+    matched, unmatched, rejected = _matched(items, _results_by_action(rows))
     edited = sum(v == "edited" for v in matched.values())
     return {"value": _ratio(edited, len(matched)), "denominator": len(matched), "unmatched": unmatched,
-            "reason": _reason(rows, "queue_item", unmatched)}
+            "rejected": rejected, "reason": _reason(rows, "queue_item", unmatched)}
 
 
 def metric_m3(rows):
@@ -155,11 +188,11 @@ def metric_m3(rows):
 
 def metric_m4(rows):
     items = {aid: r for aid, r in _unique_items(rows).items() if r.get("commit_stage", "none") != "none"}
-    matched, unmatched = _matched(items, _results_by_action(rows))
+    matched, unmatched, rejected = _matched(items, _results_by_action(rows))
     adopted = sum(v == "adopted_as_is" for v in matched.values())
     reason = _reason(rows, "queue_item", unmatched)
     return {"value": f"検知 {len(items)} 件・採用 {_ratio(adopted, len(matched))}", "denominator": len(matched),
-            "unmatched": unmatched, "reason": reason}
+            "unmatched": unmatched, "rejected": rejected, "reason": reason}
 
 
 def _reason(rows, event, unmatched):
@@ -174,13 +207,10 @@ def metric_m6(tasks, as_of):
     """as_of 時点のスナップショット。期限から暦日 3 日超で、期限以降に defer/done/drop が無い open/doing。"""
     if tasks is None:
         return {"value": "未計測", "denominator": 0, "unmatched": 0, "reason": "tasks.json が無い"}
-    active = [t for t in tasks if t.get("status") in ACTIVE and t.get("due")]
+    active = [t for t in tasks if t.get("status") in ACTIVE and t.get("due")]  # load_tasks が形を検査済み
     stale = []
     for task in active:
-        try:
-            due = date.fromisoformat(task["due"])
-        except ValueError:
-            continue
+        due = date.fromisoformat(task["due"])
         cleared = any(h.get("op") in CLEARING_OPS and str(h.get("at", ""))[:10] >= due.isoformat()
                       for h in task.get("history", []))
         if (as_of - due).days > STALE_DAYS and not cleared:
@@ -212,7 +242,7 @@ METRIC_TITLES = {"M2": "M2 一括確認の編集率（代用）", "M3": "M3 承�
                  "M6": "M6 期限超過の放置タスク（スナップショット）"}
 
 
-def render(review, skipped):
+def render(review):
     lines = ["# 試用 2 週間後の集計（読み取り専用・解釈なし）", ""]
     if review["undetermined"]:
         lines.append("期間: **開始日不明・未計測**（監査ログ 0 行で、`trial.start_date` も空）。M2〜M4 は数えていません")
@@ -223,12 +253,12 @@ def render(review, skipped):
     lines.append(f"分母 {MIN_DENOMINATOR} 件未満の割合は「判定不能」。除外した「照合不能」は件数を別に出す")
     for key, metric in review["metrics"].items():
         lines += ["", f"## {METRIC_TITLES[key]}", f"- 数字: {metric['value']}", f"- 分母: {metric['denominator']}"]
+        if metric.get("rejected"):
+            lines.append(f"- 却下: {metric['rejected']} 件（分母から除外。照合不能とは別）")
         if metric["unmatched"]:
             lines.append(f"- 照合不能: {metric['unmatched']} 件（分母から除外）")
         lines.append(f"- 取れなかった理由: {metric['reason'] or 'なし'}")
     lines += ["", "M1・M5 は Jira 実接続後のため未計測。M7 は推定版のみで、この集計の対象外（26 §2）。"]
-    if skipped:
-        lines.append(f"読めない監査行が {skipped} 行ありました（数えていません）")
     lines.append("数字は調整の材料で、原因の説明ではありません。しきい値の変更は EM が決めます。")
     return "\n".join(lines) + "\n"
 
@@ -244,12 +274,12 @@ def main(argv=None):
         today = date.fromisoformat(args.today) if args.today else datetime.now(JST).date()
         raw = args.start_date if args.start_date is not None else read_config_start_date(args.config)
         start = parse_start_date(raw, today)
-        rows, skipped = load_audit(args.data_dir / "audit")
+        rows = load_audit(args.data_dir / "audit")
         tasks = load_tasks(args.data_dir / "tasks" / "tasks.json")
     except (TrialReviewError, ValueError) as exc:
         print(f"trial_review: {exc}", file=sys.stderr)
         return 2
-    sys.stdout.write(render(build_review(rows, tasks, start, today), skipped))
+    sys.stdout.write(render(build_review(rows, tasks, start, today)))
     return 0
 
 

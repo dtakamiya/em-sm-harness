@@ -64,14 +64,14 @@ class BuildReviewTest(unittest.TestCase):
         review = tr.build_review([], [], None, TODAY)
         self.assertTrue(review["undetermined"])
         self.assertEqual(review["metrics"]["M2"]["value"], "未計測")
-        self.assertIn("開始日不明・未計測", tr.render(review, 0))
+        self.assertIn("開始日不明・未計測", tr.render(review))
 
     def test_provisional_start_is_oldest_audit_day(self):
         rows = with_day([row("2026-10-08", "queue_rendered", individual=1, bulk=0, carried_over=0)])
         review = tr.build_review(rows, [], None, TODAY)
         self.assertEqual(review["start"], date(2026, 10, 8))
         self.assertTrue(review["provisional"])
-        self.assertIn("仮の開始日", tr.render(review, 0))
+        self.assertIn("仮の開始日", tr.render(review))
 
     def test_rows_outside_window_are_ignored(self):
         rows = with_day([item("a-1", "2026-10-05"), item("a-2", "2026-10-20")])
@@ -99,7 +99,7 @@ class M2M4Test(unittest.TestCase):
 
     def test_ratio_and_unmatched_excluded_from_denominator(self):
         m = tr.metric_m2(self._rows(["edited", "edited", "adopted_as_is", "adopted_as_is", "adopted_as_is", None, "rejected"]))
-        self.assertEqual((m["denominator"], m["unmatched"]), (5, 2))
+        self.assertEqual((m["denominator"], m["unmatched"], m["rejected"]), (5, 1, 1))
         self.assertIn("2/5（40%）", m["value"])
         self.assertIn("em_reviewed が無い", m["reason"])
 
@@ -162,20 +162,87 @@ class MainTest(unittest.TestCase):
         self.assertEqual((code, out), (2, ""))
         self.assertIn("ISO 日付", err)
 
-    def test_end_to_end_writes_nothing_and_skips_broken_lines(self):
+    def test_end_to_end_writes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             audit = Path(d) / "audit"
             audit.mkdir()
-            lines = [json.dumps(item("a-1", stage="A")), "{broken", json.dumps(reviewed("a-1", "edited"))]
+            lines = [json.dumps(item("a-1", stage="A")), json.dumps(reviewed("a-1", "edited"))]
             (audit / "2026-10-07.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
             before = sorted(p.name for p in Path(d).rglob("*"))
             code, out, _ = self.run_main("--data-dir", d, "--start-date", "2026-10-06", "--today", "2026-10-20",
                                          "--config", str(Path(d) / "none.yaml"))
             self.assertEqual(sorted(p.name for p in Path(d).rglob("*")), before)
         self.assertEqual(code, 0)
-        self.assertIn("読めない監査行が 1 行", out)
         self.assertIn("開始日 2026-10-06 〜 2026-10-19（暦日 14 日・JST）", out)
         self.assertNotIn("仮の開始日", out)
+
+    def _audit_dir(self, d, lines=(), raw=None):
+        audit = Path(d) / "audit"
+        audit.mkdir()
+        path = audit / "2026-10-07.jsonl"
+        path.write_bytes(raw) if raw is not None else path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def assert_stops(self, d, message):
+        code, out, err = self.run_main("--data-dir", d, "--start-date", "2026-10-06", "--today", "2026-10-20",
+                                       "--config", str(Path(d) / "none.yaml"))
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn(message, err)
+        self.assertNotIn(d, err)
+        return err
+
+    def test_broken_json_audit_line_stops_with_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._audit_dir(d, [json.dumps(item("a-1")), "{broken"])
+            self.assert_stops(d, "読めない行が 1 行")
+
+    def test_audit_line_with_unreadable_ts_stops_with_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._audit_dir(d, [json.dumps({"ts": "昨日", "event": "queue_item"}), json.dumps({"event": "x"}), "[1]"])
+            self.assert_stops(d, "読めない行が 3 行")
+
+    def test_non_utf8_audit_file_stops_with_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._audit_dir(d, raw=b"\xff\xfe\x00")
+            self.assert_stops(d, "UTF-8")
+
+    def _tasks_dir(self, d, payload):
+        (Path(d) / "tasks").mkdir()
+        (Path(d) / "tasks" / "tasks.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_malformed_tasks_stop_with_exit_2_instead_of_crashing(self):
+        bad = [{"tasks": ["x"]}, {"tasks": [{"status": "open", "due": "2026-10-01"}]},
+               {"tasks": [{"id": "t-1", "status": "open", "due": "10/01"}]},
+               {"tasks": [{"id": "t-1", "status": "open", "due": 5}]},
+               {"tasks": [{"id": "t-1", "status": "open", "due": "2026-10-01", "history": ["x"]}]},
+               {"tasks": [None]}, {"tasks": "x"}, [1]]
+        for payload in bad:
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as d:
+                self._tasks_dir(d, payload)
+                self.assert_stops(d, "tasks.json")
+
+    def test_task_without_due_is_valid(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._tasks_dir(d, {"tasks": [{"id": "t-1", "status": "open", "due": None}]})
+            code, _, _ = self.run_main("--data-dir", d, "--start-date", "2026-10-06", "--today", "2026-10-20",
+                                       "--config", str(Path(d) / "none.yaml"))
+        self.assertEqual(code, 0)
+
+    def test_start_date_error_does_not_echo_the_value(self):
+        with tempfile.TemporaryDirectory() as d:
+            _, _, err = self.run_main("--data-dir", d, "--start-date", "2099/01/01", "--today", "2026-10-20")
+        self.assertNotIn("2099", err)
+
+
+class RejectedTest(unittest.TestCase):
+    def test_rejected_is_reported_separately_from_unmatched(self):
+        rows = with_day([item("a-1"), reviewed("a-1", "rejected"), item("a-2")])
+        m = tr.metric_m2(rows)
+        self.assertEqual((m["rejected"], m["unmatched"], m["denominator"]), (1, 1, 0))
+        review = {"start": START, "end": START, "provisional": False, "as_of": START, "in_progress": False,
+                  "undetermined": False, "metrics": {"M2": m}}
+        out = tr.render(review)
+        self.assertIn("却下: 1 件", out)
+        self.assertIn("照合不能: 1 件", out)
 
 
 if __name__ == "__main__":
