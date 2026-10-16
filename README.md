@@ -38,10 +38,10 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 
 | いつ | 秘書に言う | 実行されるコマンド | EM の時間 | 出力の置き場 |
 |---|---|---|---|---|
-| 週頭（週1回） | **貼るだけで足りる。変換スクリプトも使える。**<br>・手で貼る: 今週の会議一覧を `data/meetings/meetings.json` に貼る（形は `skills/proactive-scan/examples/meetings.sample.json`。各会議に `id`＝連番の識別子・`title`・`start`＝日付、準備タスクがあれば `prep_task_id`＝会議準備タスクの紐付け ID）<br>・変換する: カレンダー表示をテキストで保存し `python3 scripts/calendar_paste_to_meetings.py 貼ったファイル.txt --out data/meetings/meetings.json`（前週のファイルがあるときだけ、先に `[ -f data/meetings/meetings.json ] && mv data/meetings/meetings.json data/meetings/meetings.$(date +%F).json` で退避。上書きはされない）<br>・変換の注意: `prep_task_id` は空で出る（準備タスクとの紐付けは後で EM が決める）／`id` は貼り直すと変わる／見出しに年が無ければ `--year`（既定は今年）の年とみなす。12月→1月の週は1月側の見出しに年（2027-01-04）を付ける<br>・読めない行や会議0件のときは何も書かず行番号を報告する。直して再実行すればよい（この時点では何も書かれていないので mv は再度不要）<br>・会社の実データなのでコミットしない（`data/` は gitignore）。貼らない週は会議準備の検知だけ「入力なし」と1行出て、他の検知は動く | 貼ったあとは朝の計画（`python3 scripts/morning_plan.py --proactive`）で会議準備が出る | 約3分 | `data/meetings/meetings.json` |
+| 週頭（週1回） | 「今週の会議を取り込んで」。今週の会議一覧を `data/meetings/meetings.json` に貼る（手で貼る／変換スクリプトのどちらでも。[詳細](#週頭の会議貼り付けの詳細)） | 変換する場合は `python3 scripts/calendar_paste_to_meetings.py 貼ったファイル.txt --out data/meetings/meetings.json`。貼ったあとは朝の計画（`python3 scripts/morning_plan.py --proactive`）で会議準備が出る | 約3分 | `data/meetings/meetings.json`（実データ・コミットしない） |
 | 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/drafts/`（`make_draft.py nudge`） |
-| Slack を貼った後 | **4 段階。①前処理②匿名化は機械、③構造化 JSON は人手、④候補化。①②④は停止時に何も書かない。** 生の貼り付けは gitignore 済みの `data/inbox/slack/` に置く。①`python3 scripts/slack_preprocess.py <貼り付け>.md`（分解・既出除外・機微語の貼り付けはスキップ）→ ②`python3 scripts/slack_anonymize.py data/inbox/slack/parsed/<①の出力>.json`（環境変数 `EM_HARNESS_ANON_KEY` と名簿 `config/local.roster.json` が要る。名簿外の人名が残れば停止）→ ③匿名化済みから構造化 JSON を EM と秘書が手で用意（抽出器は未実装）。そのうえで「Slack の依頼を候補に」。用語（機微語・既出台帳・`allow_words`・`skipped`）、終了コード・再実行可否・台帳破損時は [slack-to-candidates の SKILL.md](skills/slack-to-candidates/SKILL.md)（末尾の補足節） | ④`python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | 途中は `data/inbox/slack/{parsed,anon}/`・`data/structured/slack/`（gitignore 済み・暫定 14 日）。14 日超の削除対象が残っていると、朝の計画の「詳細」と `check_env.py` の末尾に件数と実行コマンド名が1行だけ出る（削除はしない・0 件の日は何も出ない・`.json` 以外やリンクで purge が止まる状態のときはそう1行出る）。14 日超の削除は `python3 scripts/slack_purge.py`（既定 dry-run・`--apply` で削除。対象は raw・`parsed/`・`anon/` と `data/structured/slack/` 直下の `*.json`。台帳 `.seen.json` は対象外＝手動削除。`structured/slack/` に `.json` 以外のファイルやリンクがあると全体が終了コード 2 で止まる。EM が該当ファイルを手で除去してから再実行）。最終は `data/tasks/candidates.json` |
-| 会議が終わった後 | 生メモは gitignore 済みの `data/` 配下に置く（コミットしない）。front matter（`meeting_alias` / `held_on`）付きで貼り、環境変数 `EM_HARNESS_ANON_KEY`（16 文字以上）を設定して `python3 scripts/meeting_preprocess.py <メモ>.md` で匿名化（名簿・機微語ファイルは Slack と共通。名簿外の人名が残る（行頭の「X:」は既知ラベル・名簿・allow_words 以外なら停止。文中の名前は検出できない。誤検知で止まったら `allow_words` に追加して再実行。何も書かれていないので再実行可）・機微語に当たる・同名の出力が既にある場合は何も書かず終了コード 2 で中止。同名があると再実行できない）。匿名化後の構造化 JSON は現状 EM と秘書が手で用意（抽出器＝匿名化済みメモから決定・アクション・未決を自動で取り出すプログラムは未実装で、設計書 28 §9 の未決事項 2 番。`meeting_alias` は会議の別名で実会議名・人名は入れない。emh-077＝board 上の「会議メモの前処理・匿名化」項目の ID。手順は `meeting-to-candidates` の SKILL.md）。そのうえで「会議メモを議事録と候補に」 | `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/outputs/drafts/`（議事録下書き・未送信）と `data/tasks/candidates.json` |
+| Slack を貼った後 | 「Slack の依頼を候補に」（先に①前処理②匿名化③構造化 JSON の用意が要る。4 段階の手順・用語・保持期限は [詳細](#slack-を貼った後の詳細)） | ①`python3 scripts/slack_preprocess.py <貼り付け>.md` → ②`python3 scripts/slack_anonymize.py data/inbox/slack/parsed/<①の出力>.json` → ③構造化 JSON は EM と秘書が手で用意 → ④`python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | 最終は `data/tasks/candidates.json`。途中は `data/inbox/slack/` 配下（gitignore 済み・暫定 14 日。削除は [詳細](#slack-を貼った後の詳細)） |
+| 会議が終わった後 | 生メモを front matter（`meeting_alias` / `held_on`）付きで貼り、「会議メモを議事録と候補に」（匿名化の前処理が先に要る。[詳細](#会議が終わった後の詳細)） | `python3 scripts/meeting_preprocess.py <メモ>.md`（匿名化。環境変数 `EM_HARNESS_ANON_KEY` が要る）→ 構造化 JSON は手で用意 → `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/outputs/drafts/`（議事録下書き・未送信）と `data/tasks/candidates.json` |
 | 返信案が要る | 「返信案を作って」 | `python3 scripts/make_draft.py slack-reply <input>.json --dry-run` → 外して保存 | 約2分/件 | `data/outputs/drafts/`（未送信。送るのは EM） |
 | 返答を反映 | 「採用 c-0001」「完了 t-0001」「分割 t-0003 案1 案2」「待ち t-0004 member-a」など | `python3 scripts/apply_reply.py "採用 c-0001" "完了 t-0001"`（`--dry-run` で確認、`--undo` で直前を戻す） | 約1分 | `data/tasks/tasks.json` |
 | 夕方 | 「夕方の締め」 | `python3 scripts/evening_wrapup.py` | 約1分 | 画面に1枚（読み取り専用。出す内容がない日は1行） |
@@ -55,6 +55,35 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 - 1on1 アジェンダ案（`skills/one-on-one-agenda`、O1＝1on1 のアジェンダ案）は**試作・架空サンプルのみ**: 前回の持ち越し（上の O2 の出力）と本人の発言から、未送信の下書きを作る（`make_draft.py one-on-one-agenda`）。観察 3 点・解釈 2 つまで。Jira 指標は入力にしない。上の毎日の手順にはまだ含めない（EM が次の 1on1 前に使い、60 秒で読めて前回の持ち越しが漏れなく出たと判定したら組む）
 - 秘書の手順書は `skills/<名前>/SKILL.md`（`morning-plan` / `slack-to-candidates` / `meeting-to-candidates` / `draft-reply` / `evening-wrapup` / `weekly-review` / `proactive-scan` / `sprint-health` / `sprint-planning` / `stakeholder-report` / `one-on-one-followup` / `one-on-one-agenda`）
 - 実データは `data/`（gitignore）に置く。サンプルで試すだけなら各 SKILL.md の「試す」を実行
+
+### 週頭の会議貼り付けの詳細
+
+貼るだけで足りる。変換スクリプトも使える。
+
+- 手で貼る: 今週の会議一覧を `data/meetings/meetings.json` に貼る（形は `skills/proactive-scan/examples/meetings.sample.json`。各会議に `id`＝連番の識別子・`title`・`start`＝日付、準備タスクがあれば `prep_task_id`＝会議準備タスクの紐付け ID）
+- 変換する: カレンダー表示をテキストで保存し `python3 scripts/calendar_paste_to_meetings.py 貼ったファイル.txt --out data/meetings/meetings.json`（前週のファイルがあるときだけ、先に `[ -f data/meetings/meetings.json ] && mv data/meetings/meetings.json data/meetings/meetings.$(date +%F).json` で退避。上書きはされない）
+- 変換の注意: `prep_task_id` は空で出る（準備タスクとの紐付けは後で EM が決める）／`id` は貼り直すと変わる／見出しに年が無ければ `scripts/calendar_paste_to_meetings.py` の `--year`（既定は今年）の年とみなす。12月→1月の週は1月側の見出しに年（2027-01-04）を付ける
+- 読めない行や会議0件のときは何も書かず行番号を報告する。直して再実行すればよい（この時点では何も書かれていないので mv は再度不要）
+- 会社の実データなのでコミットしない（`data/` は gitignore）。貼らない週は会議準備の検知だけ「入力なし」と1行出て、他の検知は動く
+
+### Slack を貼った後の詳細
+
+4 段階。①前処理②匿名化は機械、③構造化 JSON は人手、④候補化。①②④は停止時に何も書かない。
+
+- 生の貼り付けは gitignore 済みの `data/inbox/slack/` に置く
+- ①`python3 scripts/slack_preprocess.py <貼り付け>.md`（分解・既出除外・機微語の貼り付けはスキップ）
+- ②`python3 scripts/slack_anonymize.py data/inbox/slack/parsed/<①の出力>.json`（環境変数 `EM_HARNESS_ANON_KEY` と名簿 `config/local.roster.json` が要る。名簿外の人名が残れば停止）
+- ③匿名化済みから構造化 JSON を EM と秘書が手で用意（抽出器は未実装）。そのうえで「Slack の依頼を候補に」
+- ④`python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す
+- 用語（機微語・既出台帳・`allow_words`・`skipped`）、終了コード・再実行可否・台帳破損時は [slack-to-candidates の SKILL.md](skills/slack-to-candidates/SKILL.md)（末尾の補足節）
+- 途中の置き場は `data/inbox/slack/{parsed,anon}/`・`data/structured/slack/`（gitignore 済み・暫定 14 日）。14 日超の削除対象が残っていると、朝の計画の「詳細」と `check_env.py` の末尾に件数と実行コマンド名が1行だけ出る（削除はしない・0 件の日は何も出ない・`.json` 以外やリンクで purge が止まる状態のときはそう1行出る）
+- 14 日超の削除は `python3 scripts/slack_purge.py`（既定 dry-run・`--apply` で削除。対象は raw・`parsed/`・`anon/` と `data/structured/slack/` 直下の `*.json`。台帳 `.seen.json` は対象外＝手動削除。`structured/slack/` に `.json` 以外のファイルやリンクがあると全体が終了コード 2 で止まる。EM が該当ファイルを手で除去してから再実行）
+
+### 会議が終わった後の詳細
+
+- 生メモは gitignore 済みの `data/` 配下に置く（コミットしない）。front matter（`meeting_alias` / `held_on`）付きで貼り、環境変数 `EM_HARNESS_ANON_KEY`（16 文字以上）を設定して `python3 scripts/meeting_preprocess.py <メモ>.md` で匿名化する（名簿・機微語ファイルは Slack と共通）
+- 次の場合は何も書かず終了コード 2 で中止する: 名簿外の人名が残る（行頭の「X:」は既知ラベル・名簿・allow_words 以外なら停止。文中の名前は検出できない。誤検知で止まったら `allow_words` に追加して再実行。何も書かれていないので再実行可）／機微語に当たる／同名の出力が既にある（同名があると再実行できない）
+- 匿名化後の構造化 JSON は現状 EM と秘書が手で用意（抽出器＝匿名化済みメモから決定・アクション・未決を自動で取り出すプログラムは未実装で、設計書 28 §9 の未決事項 2 番。`meeting_alias` は会議の別名で実会議名・人名は入れない。emh-077＝board 上の「会議メモの前処理・匿名化」項目の ID。手順は `meeting-to-candidates` の SKILL.md）。そのうえで「会議メモを議事録と候補に」
 
 ## ディレクトリ
 

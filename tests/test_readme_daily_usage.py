@@ -81,6 +81,18 @@ class ReadmeDailyUsageTest(unittest.TestCase):
     def test_no_real_data_markers(self):
         self.assertNotRegex(self.body, r"https?://|xox[bp]-|@[\w.-]+\.\w+")
 
+    def test_long_table_cells_link_to_existing_detail_sections(self):
+        # 表のセルは短く保ち、長い手順は ### 節に移して表からリンクする（emh-088）
+        headings = {h.lower().replace(" ", "-") for h in re.findall(r"^### (.+)$", self.body, re.M)}
+        for label in ("週頭", "Slack を貼った後", "会議が終わった後"):
+            row = next(l for l in self.body.splitlines() if l.startswith(f"| {label}"))
+            self.assertLessEqual(max(len(c) for c in row.split("|")), 400, label)
+            self.assertNotIn("<br>", row, label)
+            anchors = re.findall(r"\]\(#([^)]+)\)", row)
+            self.assertTrue(anchors, label)
+            for a in anchors:
+                self.assertIn(a, headings, a)
+
     def test_linked_docs_exist(self):
         for rel in re.findall(r"\]\((docs/[^)#]+)", self.body):
             self.assertTrue((ROOT / rel).is_file(), rel)
