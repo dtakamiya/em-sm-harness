@@ -17,3 +17,7 @@ confluence:
 
 feedback:
   outbox: "data/feedback-outbox.md"
+
+trial:
+  # 試用を始めた日（YYYY-MM-DD）。空なら監査ログの最古日を仮の開始日として扱う
+  start_date: ""

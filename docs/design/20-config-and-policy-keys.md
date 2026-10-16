@@ -91,5 +91,6 @@
 | `confluence.space_keys` | list | `["EXAMPLE"]` | |
 | `confluence.token_env` | str | `CONFLUENCE_API_TOKEN` | 環境変数名のみ |
 | `feedback.outbox` | str | `data/feedback-outbox.md` | 秘書が EM の一言を追記する先（[08](08-portability.md)） |
+| `trial.start_date` | str | `""`（空） | 試用開始日（ISO 日付 `YYYY-MM-DD`）。EM が試用を始めた日に1回書く。空なら監査ログの最古日を**仮の開始日**として使い、出力に「仮」と明記する（[26 §1](26-trial-review-metrics.md)） |
 
 社内固有の語（組織名・プロジェクト名等）の検出パターンは `local.yaml` ではなく `config/local.leak-patterns.txt`（1 行 1 正規表現・gitignore 済み）に置く（[19](19-check-no-leak.md)。Q-024=①で一本化。EM・2026-10-04）。
