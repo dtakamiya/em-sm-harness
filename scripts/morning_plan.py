@@ -10,6 +10,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+import slack_purge  # noqa: E402
 
 MAX_TOP = 5
 MAX_CANDIDATES = 5
@@ -113,7 +115,7 @@ def _line(task, today):
     return f"{task['id']} {task['title']}{tail}"
 
 
-def render(plan, proactive_lines=(), detail_extra=(), proactive=False):
+def render(plan, proactive_lines=(), detail_extra=(), proactive=False, purge_notice=None):
     today = plan["today"]
     if plan["overdue"]:
         status, head = "🔴 要対応", f"期限超過 {len(plan['overdue'])} 件"
@@ -151,7 +153,7 @@ def render(plan, proactive_lines=(), detail_extra=(), proactive=False):
     # --proactive のときは Jira・会議の入力有無を上の detail_extra が示す。固定文で「Jira 未反映」と言い切らない
     unreflected = ("- Confluence は入力未接続のため未反映（Jira・会議の入力有無は上の行のとおり）" if proactive
                    else "- 会議準備・Jira・Confluence は入力未接続のため未反映（現フェーズは tasks と候補のみ）")
-    out += ["", "## 詳細", *detail_extra, unreflected,
+    out += ["", "## 詳細", *detail_extra, *([f"- {purge_notice}"] if purge_notice else []), unreflected,
             "- 並べ順は暫定: 期限超過 → 今日 → 3日以内 → 優先度 now/soon/later → 他を止めている数 → 期限順"]
     return "\n".join(out) + "\n"
 
@@ -165,6 +167,8 @@ def main(argv=None):
     ap.add_argument("--jira-dir", default=str(ROOT / "data/jira-cache"))
     ap.add_argument("--meetings", default=str(ROOT / "data/meetings/meetings.json"))
     ap.add_argument("--state", default=str(ROOT / "data/state/proactive.json"))
+    ap.add_argument("--slack-base", default=str(ROOT / "data/inbox/slack"))
+    ap.add_argument("--slack-structured", default=str(ROOT / "data/structured/slack"))
     args = ap.parse_args(argv)
     try:
         today = _day(args.today)
@@ -189,7 +193,9 @@ def main(argv=None):
         kept = [f for f in shown if not f.get("folded")]
         folded = [f for f in shown if f.get("folded")]
         lines = ps.render_section(kept, overflow, decisions, today, folded)
-    output = render(plan, lines, detail, proactive=args.proactive)
+    # 14 日超の一時ファイル件数を1行だけ出す（読み取りのみ・削除しない）
+    purge_notice = slack_purge.pending_notice(args.slack_base, args.slack_structured)
+    output = render(plan, lines, detail, proactive=args.proactive, purge_notice=purge_notice)
     if args.proactive:
         try:
             ps.save_state(args.state, new_state)  # 出力が組み立てられた後にだけ保存する

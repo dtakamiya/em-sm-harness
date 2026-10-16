@@ -10,10 +10,13 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+import slack_purge  # noqa: E402（判定ロジックを再利用する。二重実装しない）
 
 MIN_PYTHON = (3, 9)
 
@@ -159,6 +162,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     results = run_checks(args.root)
     print(format_results(results))
+    notice = slack_purge.pending_notice(Path(args.root) / "data/inbox/slack", Path(args.root) / "data/structured/slack")
+    if notice:  # 情報の1行。OK/NG・終了コードには影響させない
+        print(notice)
     return 0 if all(r.ok for r in results) else 1
 
 
