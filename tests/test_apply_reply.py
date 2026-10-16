@@ -114,6 +114,58 @@ class ApplyReplyTest(unittest.TestCase):
         ar.undo(self.data, now=NOW)
         self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
 
+    def test_nudge_records_history_and_moves_check_to_2_business_days_and_leaves_same_day_candidates(self):
+        self.run_replies("待ち t-0001 member-b 2026-10-05")
+        out = self.run_replies("催促済 t-0001")
+        t = self.read("tasks.json", "tasks")[0]
+        self.assertEqual((t["status"], t["waiting_on"], t["next_check"]), ("waiting", "member-b", "2026-10-07"))
+        self.assertEqual(t["history"][-1], {"at": "2026-10-05", "op": "nudge"})
+        self.assertEqual(out, ["📨 t-0001 催促1回目を記録（10/7 に再確認）"])
+        self.assertNotIn("t-0001", [x["id"] for x in mp.build_plan(self.read("tasks.json", "tasks"), [], TODAY)["nudges"]])
+        later = mp.build_plan(self.read("tasks.json", "tasks"), [], date(2026, 10, 7))["nudges"]
+        self.assertEqual(mp._nudge_count(later[0]), 1)
+
+    def test_nudge_accepts_explicit_date_and_counts_up(self):
+        self.write("tasks.json", "tasks", [task("t-0002", "waiting", history=[{"at": "2026-10-01", "op": "nudge"}])])
+        out = self.run_replies("催促済 t-0002 2026-10-12")
+        self.assertEqual(out, ["📨 t-0002 催促2回目を記録（10/12 に再確認）"])
+        self.assertEqual(self.read("tasks.json", "tasks")[0]["next_check"], "2026-10-12")
+
+    def test_nudge_and_resume_reject_bad_input_without_writing(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        for line in ("催促済 t-0001", "催促済 t-0003", "催促済 t-9999", "催促済 t-0002 2026-10-04",
+                     "催促済 t-0002 10/9", "催促済 t-0002 2026-10-09 x", "再開 t-0001", "再開 t-0003", "再開 t-0002 x"):
+            with self.subTest(line=line), self.assertRaises(ar.ReplyError):
+                self.run_replies(line)
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+
+    def test_resume_returns_waiting_to_open_and_to_todays_order(self):
+        out = self.run_replies("再開 t-0002")
+        t = [x for x in self.read("tasks.json", "tasks") if x["id"] == "t-0002"][0]
+        self.assertEqual((t["status"], t["waiting_on"], t["next_check"]), ("open", None, None))
+        self.assertEqual(t["history"][-1], {"at": "2026-10-05", "op": "resume", "from": "waiting"})
+        self.assertEqual(out, ["▶ t-0002 再開（待ちを解除して open に戻しました）"])
+        plan = mp.build_plan(self.read("tasks.json", "tasks"), [], date(2026, 10, 8))
+        self.assertIn("t-0002", [x["id"] for x in plan["top"]])
+        self.assertEqual(plan["nudges"], [])
+
+    def test_wait_nudge_resume_in_one_batch_and_undo_restores_bytes_and_audit_has_no_handle(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        self.run_replies("待ち t-0001 member-b 2026-10-05", "催促済 t-0001", "再開 t-0001")
+        self.assertEqual(self.read("tasks.json", "tasks")[0]["status"], "open")
+        rows = self.audit_rows()
+        self.assertEqual([r["op"] for r in rows], ["wait", "nudge", "resume"])
+        self.assertNotIn("member-b", (self.data / "audit" / "2026-10-05.jsonl").read_text(encoding="utf-8"))
+        ar.undo(self.data, now=NOW)
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+
+    def test_nudge_dry_run_does_not_write(self):
+        before = (self.data / "tasks" / "tasks.json").read_bytes()
+        out = self.run_replies("催促済 t-0002", dry_run=True)
+        self.assertTrue(out[0].startswith("📨 t-0002"))
+        self.assertEqual((self.data / "tasks" / "tasks.json").read_bytes(), before)
+        self.assertFalse((self.data / "audit").exists())
+
     def test_done_clears_next_check_and_appends_history(self):
         self.run_replies("完了 t-0002")
         t = [x for x in self.read("tasks.json", "tasks") if x["id"] == "t-0002"][0]

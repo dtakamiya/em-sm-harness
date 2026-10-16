@@ -16,6 +16,7 @@ from make_draft import HANDLE
 
 LATER_DAYS = 1
 WAIT_FIRST_CHECK_BDAYS = 3  # Q-019 a: 登録の 3 営業日後が最初の確認日
+NUDGE_INTERVAL_BDAYS = 2  # Q-019: 催促済の次の確認日の既定は 2 営業日後（17 §2）
 DEFER_ASK_COUNT = 3
 MIN_SPLIT_TITLES = 2
 MAX_SPLIT_TITLES = 5
@@ -82,9 +83,10 @@ def parse(line):
     parts = line.split()
     ops = {"採用": ("adopt", 0, 0), "却下": ("reject", 0, 0), "後で": ("later", 0, 1),
            "完了": ("done", 0, 0), "先送り": ("defer", 1, 1),
-           "中止": ("drop", 0, 1), "待ち": ("wait", 1, 1), "分割": ("split", MIN_SPLIT_TITLES, MAX_SPLIT_TITLES - MIN_SPLIT_TITLES)}
+           "中止": ("drop", 0, 1), "待ち": ("wait", 1, 1),
+           "催促済": ("nudge", 0, 1), "再開": ("resume", 0, 0), "分割": ("split", MIN_SPLIT_TITLES, MAX_SPLIT_TITLES - MIN_SPLIT_TITLES)}
     if not parts or parts[0] not in ops:
-        raise ReplyError(f"解釈できません: 「{line}」。書式は 採用/却下/後で/完了/先送り/中止/待ち/分割 + id（先送りは日付、待ちは相手ハンドルと任意の確認日、分割は 2〜5 件のタイトルも）")
+        raise ReplyError(f"解釈できません: 「{line}」。書式は 採用/却下/後で/完了/先送り/中止/待ち/催促済/再開/分割 + id（先送りは日付、待ちは相手ハンドルと任意の確認日、催促済は任意の次の確認日、分割は 2〜5 件のタイトルも）")
     op, need, optional = ops[parts[0]]
     args = parts[1:]
     if not args:
@@ -145,6 +147,8 @@ def apply_one(state, op, target, extra, today, archive_dir):
         return {**state, "tasks": [new if t["id"] == target else t for t in tasks]}, f"✗ {target} 中止"
     if op == "wait":
         return _wait(state, task, extra, today)
+    if op in ("nudge", "resume"):
+        return _nudge(state, task, extra, today) if op == "nudge" else _resume(state, task, today)
     if op == "split":
         return _split(state, task, extra, today, archive_dir)
     if op == "done":
@@ -178,6 +182,33 @@ def _wait(state, task, extra, today):
             f"⏳ {task['id']} {handle} 待ち（{_md(check)} に確認）")
 
 
+def _require_waiting(task, verb):
+    if task["status"] != "waiting":
+        raise ReplyError(f"{task['id']} は {task['status']} のため {verb} できません（返信待ちのタスクだけが対象です）")
+
+
+def _replace(state, new):
+    return {**state, "tasks": [new if t["id"] == new["id"] else t for t in state["tasks"]]}
+
+
+def _nudge(state, task, extra, today):
+    """waiting のまま、催促を送った記録（history の nudge）と次の確認日を更新する。送信は EM が済ませている前提。"""
+    _require_waiting(task, "催促済にする")
+    check = _day(extra[0], "次の確認日") if extra else _add_business_days(today, NUDGE_INTERVAL_BDAYS)
+    if check < today:
+        raise ReplyError(f"次の確認日 {check.isoformat()} は過去です（今日 {today.isoformat()} 以降で指定してください）")
+    count = sum(h["op"] == "nudge" for h in task.get("history", [])) + 1
+    new = _with_history(task, today, {"op": "nudge"}, next_check=check.isoformat())
+    return _replace(state, new), f"📨 {task['id']} 催促{count}回目を記録（{_md(check)} に再確認）"
+
+
+def _resume(state, task, today):
+    """waiting → open。返信が来た扱い。待ち先と確認日を外す。"""
+    _require_waiting(task, "再開")
+    new = _with_history(task, today, {"op": "resume", "from": "waiting"}, status="open", waiting_on=None, next_check=None)
+    return _replace(state, new), f"▶ {task['id']} 再開（待ちを解除して open に戻しました）"
+
+
 def _split(state, parent, titles, today, archive_dir):
     """親を dropped（理由=分割）にし、タイトルごとに open の子を作る。期限・優先度は親を引き継ぐ。"""
     tasks = state["tasks"]
@@ -200,7 +231,8 @@ ACTOR = "secretary"
 
 OP_FILES = {"adopt": ("tasks.json", "candidates.json"), "reject": ("candidates.json", "rejected.json"),
             "later": ("candidates.json",), "done": ("tasks.json",), "defer": ("tasks.json",),
-            "drop": ("tasks.json",), "wait": ("tasks.json",), "split": ("tasks.json",)}
+            "drop": ("tasks.json",), "wait": ("tasks.json",), "nudge": ("tasks.json",),
+            "resume": ("tasks.json",), "split": ("tasks.json",)}
 
 
 def _audit_rows(now, batch_id, parsed, before, after, new_ids):
@@ -315,7 +347,7 @@ def _atomic_write_bytes(path, content):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="EM の返答を data/tasks に反映する（ローカルのみ）")
-    ap.add_argument("replies", nargs="*", help="1返答=1引数（引用符で囲む）。例: 採用 c-0001 / 却下 c-0002 / 後で c-0003 [日付] / 完了 t-0001 / 先送り t-0003 2026-10-16 / 待ち t-0004 member-a [確認日]")
+    ap.add_argument("replies", nargs="*", help="1返答=1引数（引用符で囲む）。例: 採用 c-0001 / 却下 c-0002 / 後で c-0003 [日付] / 完了 t-0001 / 先送り t-0003 2026-10-16 / 待ち t-0004 member-a [確認日] / 催促済 t-0004 [次の確認日] / 再開 t-0004")
     ap.add_argument("--data-dir", default="data")
     ap.add_argument("--today", default=date.today().isoformat())
     ap.add_argument("--dry-run", action="store_true", help="書かずに結果だけ表示")

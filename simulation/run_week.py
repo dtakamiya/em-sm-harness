@@ -184,9 +184,9 @@ def week_plan(p):
         morning("wed", p), defer("wed", "リリース判断の準備メモ", "2026-10-13"), slack("wed", "2026-10-07-ex-team-02.json", p, False),
         meeting("wed", "2026-10-07-ex-sync.json", p, False),
         draft("wed", "slack-reply", "slack-reply.sample.json", p), adopt("wed", 2), evening("wed", p),
-        morning("thu", p), meeting("thu", "2026-10-08-ex-review.json", p, False),
+        morning("thu", p), reply("thu", ["催促済 t-0002"]), meeting("thu", "2026-10-08-ex-review.json", p, False),
         draft("thu", "jira-comment", "jira-comment.sample.json", p), done("thu", ("金曜までに決めたい", "デモ環境の担当")), evening("thu", p),
-        morning("fri", p), done("fri", "staging データ準備"), evening("fri", p), *weekly("fri", p),
+        morning("fri", p), reply("fri", ["再開 t-0002"]), done("fri", "staging データ準備"), evening("fri", p), *weekly("fri", p),
     ]
 
 
