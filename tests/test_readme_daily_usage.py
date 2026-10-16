@@ -85,8 +85,9 @@ class ReadmeDailyUsageTest(unittest.TestCase):
         # 表のセルは短く保ち、長い手順は ### 節に移して表からリンクする（emh-088）
         headings = {h.lower().replace(" ", "-") for h in re.findall(r"^### (.+)$", self.body, re.M)}
         for label in ("週頭", "Slack を貼った後", "会議が終わった後"):
-            row = next(l for l in self.body.splitlines() if l.startswith(f"| {label}"))
-            self.assertLessEqual(max(len(c) for c in row.split("|")), 400, label)
+            row = next((l for l in self.body.splitlines() if l.startswith(f"| {label}")), None)
+            self.assertIsNotNone(row, label)
+            self.assertLessEqual(max(len(c) for c in row.split("|")), 300, label)
             self.assertNotIn("<br>", row, label)
             anchors = re.findall(r"\]\(#([^)]+)\)", row)
             self.assertTrue(anchors, label)

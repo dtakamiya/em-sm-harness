@@ -38,7 +38,7 @@ python3 scripts/check_no_leak.py  # コミット前の持ち出し検知（git a
 
 | いつ | 秘書に言う | 実行されるコマンド | EM の時間 | 出力の置き場 |
 |---|---|---|---|---|
-| 週頭（週1回） | 「今週の会議を取り込んで」。今週の会議一覧を `data/meetings/meetings.json` に貼る（手で貼る／変換スクリプトのどちらでも。[詳細](#週頭の会議貼り付けの詳細)） | 変換する場合は `python3 scripts/calendar_paste_to_meetings.py 貼ったファイル.txt --out data/meetings/meetings.json`。貼ったあとは朝の計画（`python3 scripts/morning_plan.py --proactive`）で会議準備が出る | 約3分 | `data/meetings/meetings.json`（実データ・コミットしない） |
+| 週頭（週1回） | （言うことはなし。貼るだけ）今週の会議一覧を `data/meetings/meetings.json` に貼る（手で貼る／変換スクリプトのどちらでも。[詳細](#週頭の会議貼り付けの詳細)） | 変換する場合は `python3 scripts/calendar_paste_to_meetings.py 貼ったファイル.txt --out data/meetings/meetings.json`。貼ったあとは朝の計画（`python3 scripts/morning_plan.py --proactive`）で会議準備が出る | 約3分 | `data/meetings/meetings.json`（実データ・コミットしない） |
 | 朝 | 「今日の計画」 | `python3 scripts/morning_plan.py --proactive`（先回り検知つき） | 約2分 | 画面に1枚。催促の下書きは `data/outputs/drafts/`（`make_draft.py nudge`） |
 | Slack を貼った後 | 「Slack の依頼を候補に」（先に①前処理②匿名化③構造化 JSON の用意が要る。4 段階の手順・用語・保持期限は [詳細](#slack-を貼った後の詳細)） | ①`python3 scripts/slack_preprocess.py <貼り付け>.md` → ②`python3 scripts/slack_anonymize.py data/inbox/slack/parsed/<①の出力>.json` → ③構造化 JSON は EM と秘書が手で用意 → ④`python3 scripts/slack_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | 最終は `data/tasks/candidates.json`。途中は `data/inbox/slack/` 配下（gitignore 済み・暫定 14 日。削除は [詳細](#slack-を貼った後の詳細)） |
 | 会議が終わった後 | 生メモを front matter（`meeting_alias` / `held_on`）付きで貼り、「会議メモを議事録と候補に」（匿名化の前処理が先に要る。[詳細](#会議が終わった後の詳細)） | `python3 scripts/meeting_preprocess.py <メモ>.md`（匿名化。環境変数 `EM_HARNESS_ANON_KEY` が要る）→ 構造化 JSON は手で用意 → `python3 scripts/meeting_to_candidates.py <file>.json --dry-run` → 問題なければ `--dry-run` を外す | 約3分 | `data/outputs/drafts/`（議事録下書き・未送信）と `data/tasks/candidates.json` |
