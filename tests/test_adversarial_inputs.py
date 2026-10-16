@@ -21,6 +21,7 @@ import calendar_paste_to_meetings as cp  # noqa: E402
 import meeting_preprocess as mp  # noqa: E402
 import slack_anonymize as sa  # noqa: E402
 import slack_preprocess as sp  # noqa: E402
+import trial_review as tr  # noqa: E402
 
 TABLE_DOC = ROOT / "docs" / "design" / "35-adversarial-input-table.md"
 LEDGER_DOC = ROOT / "docs" / "design" / "34-deferred-review-findings.md"
@@ -130,6 +131,22 @@ class AdversarialInputTest(AdversarialBase):
     def test_a2_meeting_preprocess_invalid_utf8(self):
         code, _ = self.meeting_pre(self.write("in/bad.md", b"\xff\xfe\x00bad"))
         self.assert_stopped(code)
+
+    def trial(self, audit_bytes):
+        """trial_review を壊れた監査ログで呼ぶ。何も書かない script なので出力ファイルは作られない。"""
+        self.write("data/audit/2026-10-07.jsonl", audit_bytes)
+        return self.call(tr.main, "--data-dir", self.dir / "data", "--start-date", "2026-10-06", "--today", "2026-10-20",
+                         "--config", self.dir / "none.yaml")
+
+    def test_a2_trial_review_invalid_utf8(self):
+        code, out = self.trial(b"\xff\xfe\x00bad")
+        self.assert_stopped(code)
+        self.assertEqual(out, "")
+
+    def test_a5_trial_review_broken_audit_line(self):
+        code, out = self.trial(b"{broken\n")
+        self.assert_stopped(code)
+        self.assertEqual(out, "")
 
     def test_a2_calendar_invalid_utf8(self):
         code, _ = self.calendar(self.write("in/bad.txt", b"\xff\xfe\x00bad"))
@@ -268,6 +285,11 @@ class StopExitCodeTest(AdversarialBase):
         self.assertNotEqual(code, 0)
         self.assertEqual(code, STOP_CODE)
 
+    def test_exit_code_trial_review(self):
+        self.write("data/audit/2026-10-07.jsonl", b"{broken\n")
+        code, _ = self.call(tr.main, "--data-dir", self.dir / "data", "--start-date", "2026-10-06", "--today",
+                            "2026-10-20", "--config", self.dir / "none.yaml")
+        self.assertEqual(code, STOP_CODE)
 
 
 CELL_RE = re.compile(r"^(?:(OK) (test_\w+)|(NG) (D-\d+) (test_\w+)|—.+)$")
